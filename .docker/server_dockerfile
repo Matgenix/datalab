@@ -4,7 +4,7 @@ FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv_image
 FROM python:3.10 AS api
 SHELL ["/bin/bash", "--login", "-c"]
 
-# Useful for installing deps from git, preventing big downloads and bandwith quotas
+# seful for installing deps from git, preventing big downloads and bandwith quotas
 ENV GIT_LFS_SKIP_SMUDGE=1
 
 # Install system dependencies
