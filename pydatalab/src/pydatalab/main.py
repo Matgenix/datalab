@@ -203,13 +203,16 @@ def create_app(
 
             if current_user.is_authenticated:
                 for k in OAUTH_PROXIES:
-                    if k not in current_user.identity_types:
-                        auth_string += f"<li>{connect_buttons[k]}</li>"
+                    if k not in current_user.identity_types and k.value in connect_buttons:
+                        auth_string += f"<li>{connect_buttons[k.value]}</li>"
                 logout_string += f"<a href={url_for('logout')}>Log out</a>"
 
             else:
                 for k in OAUTH_PROXIES:
-                    auth_string += f"<li>{connect_buttons[k].replace('Connect', 'Login via')}</li>"
+                    if k.value in connect_buttons:
+                        auth_string += (
+                            f"<li>{connect_buttons[k.value].replace('Connect', 'Login via')}</li>"
+                        )
 
             auth_string += "</ul>"
 

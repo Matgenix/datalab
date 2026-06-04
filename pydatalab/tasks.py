@@ -165,6 +165,141 @@ def serve(_, host: str = "127.0.0.1", port: int = 5001, reload: bool = True, tes
 dev.add_task(serve)
 
 
+# Small, fixed set of example items for `dev.seed`. Each entry is an item
+# payload plus an optional (example_data-relative file path, block type) to
+# attach so the seeded item shows a rendered technique block.
+_SEED_ITEMS = [
+    (
+        {
+            "item_id": "seed_sample_xrd",
+            "type": "samples",
+            "name": "Example XRD sample",
+            "description": "Seeded sample with an example X-ray diffraction pattern.",
+        },
+        ("XRD/example_bmb.xye", "xrd"),
+    ),
+    (
+        {
+            "item_id": "seed_sample_raman",
+            "type": "samples",
+            "name": "Example Raman sample",
+            "description": "Seeded sample with an example Raman spectrum.",
+        },
+        ("raman/raman_example.txt", "raman"),
+    ),
+    (
+        {
+            "item_id": "seed_cell_echem",
+            "type": "cells",
+            "name": "Example cell",
+            "description": "Seeded cell with an example electrochemistry cycling dataset.",
+        },
+        ("echem/jdb11-1_c3_gcpl_5cycles_2V-3p8V_C-24_data_C09.mpr", "cycle"),
+    ),
+    (
+        {
+            "item_id": "seed_starting_material",
+            "type": "starting_materials",
+            "name": "Example starting material",
+            "chemform": "Na2CO3",
+            "description": "Seeded starting material.",
+        },
+        None,
+    ),
+]
+
+
+@task
+def seed(_):
+    """Populate the configured database with a small set of example items.
+
+    Creates a couple of samples, a cell and a starting material with files from
+    `pydatalab/example_data/` attached and their technique blocks rendered, so a
+    fresh development instance is not empty. Connect to whichever database
+    `PYDATALAB_MONGO_URI` points at.
+
+    Idempotent: items that already exist (matched by `item_id`) are skipped, so
+    it is safe to re-run. Forces `CONFIG.TESTING` for this process so items and
+    files can be created without authentication.
+    """
+    import io
+
+    os.environ["PYDATALAB_TESTING"] = "1"
+    if "PYDATALAB_SECRET_KEY" not in os.environ:
+        os.environ["PYDATALAB_SECRET_KEY"] = "dev-insecure-secret-key-do-not-use-in-production"  # noqa: S105
+        os.environ["PYDATALAB_ALLOW_INSECURE_SECRET_KEY"] = "1"  # noqa: S105
+
+    from pydatalab.main import create_app
+
+    example_data = pathlib.Path(__file__).parent / "example_data"
+
+    app = create_app()
+    created = skipped = 0
+    with app.test_client() as client:
+        for payload, file_spec in _SEED_ITEMS:
+            item_id = payload["item_id"]
+            resp = client.post("/new-sample/", json={"new_sample_data": payload})
+
+            if resp.status_code == 409:
+                print(f"  - {item_id}: already exists, skipping")
+                skipped += 1
+                continue
+            if resp.status_code not in (200, 201):
+                print(
+                    f"  ! {item_id}: create failed ({resp.status_code}): {resp.get_data(as_text=True)}"
+                )
+                continue
+
+            print(f"  + {item_id}: created")
+            created += 1
+
+            if file_spec is None:
+                continue
+
+            rel_path, block_type = file_spec
+            file_path = example_data / rel_path
+            if not file_path.is_file():
+                print(f"    ! example file not found, skipping block: {file_path}")
+                continue
+
+            # Upload the file and attach it to the item.
+            with open(file_path, "rb") as handle:
+                upload = client.post(
+                    "/upload-file/",
+                    data={
+                        "item_id": item_id,
+                        "replace_file": "null",
+                        "file": (io.BytesIO(handle.read()), file_path.name),
+                    },
+                    content_type="multipart/form-data",
+                )
+            if upload.status_code != 201:
+                print(f"    ! file upload failed ({upload.status_code})")
+                continue
+            file_id = upload.get_json()["file_id"]
+
+            # Create a data block, wire in the uploaded file, and render it.
+            add = client.post(
+                "/add-data-block/",
+                json={"block_type": block_type, "item_id": item_id, "index": 0},
+            )
+            if add.status_code != 200:
+                print(f"    ! adding {block_type} block failed ({add.status_code})")
+                continue
+            block_data = add.get_json()["new_block_obj"]
+            block_data["file_id"] = file_id
+            update = client.post("/update-block/", json={"block_data": block_data})
+            if update.status_code == 200:
+                print(f"    ✓ attached {file_path.name} and rendered {block_type} block")
+            else:
+                print(f"    ! rendering {block_type} block failed ({update.status_code})")
+
+    print(f"\nSeed complete: {created} created, {skipped} skipped.")
+
+
+dev.add_task(seed)
+
+
 @task
 def install(_, dev=True):
     """This task looks for a plugins.toml and attempts to
