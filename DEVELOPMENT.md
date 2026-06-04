@@ -28,10 +28,10 @@ The web app needs a logged-in session. Set up GitHub OAuth once:
    - Authorization callback URL: `http://localhost:5001/login/github/authorized`
 2. Put the credentials in `pydatalab/.env` (see the commented GitHub block in
    `.env.example`), set `PYDATALAB_TESTING=false`, restart `api-dev`.
-3. **Login via GitHub** in the web app.
+3. Set `PYDATALAB_SECRET_KEY` to a real value (generate one with
+   `python3 -c 'import secrets; print(secrets.token_hex(64))'`).
+4. **Login via GitHub** in the web app.
 
-For backend/block work without a login, set `PYDATALAB_TESTING=true` instead — API
-calls and `dev.seed` work unauthenticated (the web app UI still asks you to log in).
 
 ## Handy commands
 
@@ -41,9 +41,11 @@ docker compose exec api-dev /opt/.venv/bin/invoke admin.change-user-role \
   --display-name "Your Name" --role admin
 
 docker compose logs -f api-dev          # follow API logs
-docker compose exec api-dev /opt/.venv/bin/pytest    # backend tests
 docker compose --profile dev down       # stop (add -v to wipe the DB + files)
 ```
+
+Backend tests run natively (the Docker dev image ships without test deps); from
+`pydatalab/` use `uv sync --all-extras --dev` once, then `uv run pytest`.
 
 
 ## `dev` vs `prod` profiles
