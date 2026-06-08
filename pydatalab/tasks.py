@@ -165,58 +165,242 @@ def serve(_, host: str = "127.0.0.1", port: int = 5001, reload: bool = True, tes
 dev.add_task(serve)
 
 
-# Small, fixed set of example items for `dev.seed`. Each entry is an item
-# payload plus an optional (example_data-relative file path, block type) to
-# attach so the seeded item shows a rendered technique block.
-_SEED_ITEMS = [
-    (
-        {
-            "item_id": "seed_sample_xrd",
-            "type": "samples",
-            "name": "Example XRD sample",
-            "description": "Seeded sample with an example X-ray diffraction pattern.",
+# Example data for `dev.seed`, grouped by the block that renders it. Each group
+# is expanded by `_build_seed_items` into one seeded item per file (a single
+# block per item), so a fresh dev instance exercises every block type that has
+# example data. Groups flagged `single_item` instead produce one item carrying
+# the whole file list -- used for multi-file blocks (uv-vis: first file is the
+# background) and file-less blocks (comment). All paths are relative to
+# `pydatalab/example_data/` and only list files the parser actually accepts;
+# companion files (Biologic .mps/.sta, gzipped JEOL, READMEs) are omitted.
+_SEED_BLOCK_GROUPS: list[dict] = [
+    {
+        "block_type": "xrd",
+        "item_type": "samples",
+        "files": [
+            "XRD/CG20396_jdb12-1.xrdml",
+            "XRD/HL1-2_5-90_60min.xrdml",
+            "XRD/JO_KL_16_ZF_3_60deg_0.02step_12degpermin_001.rasx",
+            "XRD/TiO2.raw",
+            "XRD/TiOF.brml",
+            "XRD/cod_9004112.cif",
+            "XRD/example_bmb.xye",
+            "XRD/example_evadiffract.xy",
+            "XRD/example_mac.xye",
+            "XRD/example_mythen.dat",
+            "XRD/example_mythen.xye",
+            "XRD/example_ocx.xy",
+            "XRD/Scan_C1.xrdml",
+            "XRD/Scan_C2.xrdml",
+            "XRD/Scan_C3.xrdml",
+            "XRD/Scan_C4.xrdml",
+            "XRD/Scan_C5.xrdml",
+            "XRD/Scan_C6.xrdml",
+            "XRD/Scan_C7.xrdml",
+            "XRD/Scan_C8.xrdml",
+            "XRD/Scan_C9.xrdml",
+            "XRD/Scan_C10.xrdml",
+        ],
+    },
+    {
+        "block_type": "raman",
+        "item_type": "samples",
+        "files": [
+            "raman/labspec_raman_example.txt",
+            "raman/raman_example.txt",
+            "raman/raman_example.wdf",
+        ],
+    },
+    {
+        "block_type": "cycle",
+        "item_type": "cells",
+        "files": [
+            "echem/arbin_example.bdf.csv",
+            "echem/jdb11-1_c3_gcpl_5cycles_2V-3p8V_C-24_data_C09.mpr",
+            "echem/jdb11-1_e1_s3_squidTest_data_C15.mpr",
+        ],
+    },
+    {
+        "block_type": "nmr",
+        "item_type": "samples",
+        "files": [
+            "NMR/1.zip",  # Bruker 1D
+            "NMR/1h.dx",  # JCAMP-DX
+            "NMR/13c.jdx",  # JCAMP-DX
+            "NMR/71.zip",  # Bruker 1D
+            # 72.zip (2D dataset: metadata only, no plot) and multi_nuclei.zip
+            # (selects an experiment with no Bruker binary) are omitted -- the
+            # block only renders 1D data.
+        ],
+    },
+    {
+        "block_type": "ftir",
+        "item_type": "samples",
+        "files": [
+            "FTIR/2024-10-10_FeSO4_ref.asp",
+            "FTIR/[FTIRText]020.txt",
+        ],
+    },
+    {
+        "block_type": "ms",
+        "item_type": "samples",
+        "files": [
+            "TGA-MS/20221128 134958 TGA MS Megan.asc",
+            # mp2028_281122_LNO+C.txt is omitted: the ms parser decodes as UTF-8
+            # and that file contains a latin-1 degree sign, raising a decode error.
+        ],
+    },
+    {
+        "block_type": "tabular",
+        "item_type": "samples",
+        "files": [
+            "csv/simple.csv",
+            "csv/simple.xlsx",
+        ],
+    },
+    {
+        "block_type": "media",
+        "item_type": "samples",
+        "files": [
+            "media/grey_group_logo.jpeg",
+            "media/grey_group_logo.tif",
+        ],
+    },
+    {
+        # A single uv-vis block needs >=2 files; the first is the background scan.
+        "block_type": "uv-vis",
+        "item_type": "samples",
+        "single_item": True,
+        "name": "UV-Vis example (background + scans)",
+        "files": [
+            "UV-Vis/1908047U1_0000.Raw8.TXT",
+            "UV-Vis/1908047U1_0001.Raw8.txt",
+            "UV-Vis/1908047U1_0060.Raw8.txt",
+        ],
+    },
+    {
+        # File-less block: the text lives in the `freeform_comment` field.
+        "block_type": "comment",
+        "item_type": "samples",
+        "single_item": True,
+        "name": "Comment example",
+        "files": [],
+        "block_data": {
+            "freeform_comment": "Seeded comment block — rich-text notes attached to a sample.",
         },
-        ("XRD/example_bmb.xye", "xrd"),
-    ),
-    (
-        {
-            "item_id": "seed_sample_raman",
-            "type": "samples",
-            "name": "Example Raman sample",
-            "description": "Seeded sample with an example Raman spectrum.",
-        },
-        ("raman/raman_example.txt", "raman"),
-    ),
-    (
-        {
-            "item_id": "seed_cell_echem",
-            "type": "cells",
-            "name": "Example cell",
-            "description": "Seeded cell with an example electrochemistry cycling dataset.",
-        },
-        ("echem/jdb11-1_c3_gcpl_5cycles_2V-3p8V_C-24_data_C09.mpr", "cycle"),
-    ),
-    (
-        {
+    },
+]
+
+# Items seeded without any block, for item-type variety.
+_SEED_EXTRA_ITEMS: list[dict] = [
+    {
+        "payload": {
             "item_id": "seed_starting_material",
             "type": "starting_materials",
             "name": "Example starting material",
             "chemform": "Na2CO3",
             "description": "Seeded starting material.",
         },
-        None,
-    ),
+        "block_type": None,
+        "files": [],
+        "block_data": {},
+    },
 ]
+
+
+# `item_id` is validated to be at most this many characters (see the item models),
+# so generated ids are truncated to fit.
+_MAX_ITEM_ID_LENGTH = 40
+
+
+def _slug(value: str) -> str:
+    """Lowercase `value` and collapse any run of non-alphanumerics into a single underscore."""
+    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+
+
+def _make_item_id(base: str, used: set[str]) -> str:
+    """Slugify `base`, truncate to the item-id length limit, and disambiguate collisions.
+
+    Deterministic given a stable input order, so re-running `dev.seed` yields the same
+    ids (keeping it idempotent).
+    """
+    candidate = _slug(base)[:_MAX_ITEM_ID_LENGTH].rstrip("_")
+    if candidate not in used:
+        used.add(candidate)
+        return candidate
+    i = 2
+    while True:
+        suffix = f"_{i}"
+        candidate = (_slug(base)[: _MAX_ITEM_ID_LENGTH - len(suffix)].rstrip("_")) + suffix
+        if candidate not in used:
+            used.add(candidate)
+            return candidate
+        i += 1
+
+
+def _build_seed_items() -> list[dict]:
+    """Expand `_SEED_BLOCK_GROUPS` into a flat list of item specs for `dev.seed`.
+
+    Each spec is a dict with keys `payload` (the `/new-sample/` body), `block_type`
+    (or `None` for no block), `files` (example_data-relative paths) and `block_data`
+    (extra fields merged into the block before rendering).
+    """
+    items: list[dict] = []
+    used_ids: set[str] = set()
+    for group in _SEED_BLOCK_GROUPS:
+        block_type = group["block_type"]
+        item_type = group["item_type"]
+        block_data = group.get("block_data", {})
+
+        if group.get("single_item"):
+            name = group.get("name", f"{block_type} example")
+            items.append(
+                {
+                    "payload": {
+                        "item_id": _make_item_id(f"seed_{block_type}", used_ids),
+                        "type": item_type,
+                        "name": name,
+                        "description": group.get("description", f"Seeded {block_type} example."),
+                    },
+                    "block_type": block_type,
+                    "files": list(group["files"]),
+                    "block_data": dict(block_data),
+                }
+            )
+            continue
+
+        for rel_path in group["files"]:
+            filename = pathlib.PurePosixPath(rel_path).name
+            items.append(
+                {
+                    "payload": {
+                        "item_id": _make_item_id(f"seed_{block_type}_{filename}", used_ids),
+                        "type": item_type,
+                        "name": f"{block_type} example: {filename}",
+                        "description": f"Seeded {block_type} example from {filename}.",
+                    },
+                    "block_type": block_type,
+                    "files": [rel_path],
+                    "block_data": dict(block_data),
+                }
+            )
+
+    items.extend(_SEED_EXTRA_ITEMS)
+    return items
+
+
+_SEED_ITEMS = _build_seed_items()
 
 
 @task
 def seed(_):
-    """Populate the configured database with a small set of example items.
+    """Populate the configured database with a comprehensive set of example items.
 
-    Creates a couple of samples, a cell and a starting material with files from
-    `pydatalab/example_data/` attached and their technique blocks rendered, so a
-    fresh development instance is not empty. Connect to whichever database
-    `PYDATALAB_MONGO_URI` points at.
+    Seeds one item per example file under `pydatalab/example_data/`, attaching and
+    rendering the matching technique block, so a fresh development instance covers
+    every block type that has example data (xrd, raman, cycle, nmr, ftir, ms,
+    uv-vis, tabular, media), plus a comment block and a starting material. Connect
+    to whichever database `PYDATALAB_MONGO_URI` points at.
 
     Idempotent: items that already exist (matched by `item_id`) are skipped, so
     it is safe to re-run. Forces `CONFIG.TESTING` for this process so items and
@@ -236,7 +420,8 @@ def seed(_):
     app = create_app()
     created = skipped = 0
     with app.test_client() as client:
-        for payload, file_spec in _SEED_ITEMS:
+        for spec in _SEED_ITEMS:
+            payload = spec["payload"]
             item_id = payload["item_id"]
             resp = client.post("/new-sample/", json={"new_sample_data": payload})
 
@@ -253,32 +438,35 @@ def seed(_):
             print(f"  + {item_id}: created")
             created += 1
 
-            if file_spec is None:
+            block_type = spec["block_type"]
+            if block_type is None:
                 continue
 
-            rel_path, block_type = file_spec
-            file_path = example_data / rel_path
-            if not file_path.is_file():
-                print(f"    ! example file not found, skipping block: {file_path}")
-                continue
+            # Upload each example file and attach it to the item, preserving order
+            # (the first file is the background scan for multi-file blocks).
+            file_ids: list[str] = []
+            for rel_path in spec["files"]:
+                file_path = example_data / rel_path
+                if not file_path.is_file():
+                    print(f"    ! example file not found, skipping: {file_path}")
+                    continue
+                with open(file_path, "rb") as handle:
+                    upload = client.post(
+                        "/upload-file/",
+                        data={
+                            "item_id": item_id,
+                            "replace_file": "null",
+                            "file": (io.BytesIO(handle.read()), file_path.name),
+                        },
+                        content_type="multipart/form-data",
+                    )
+                if upload.status_code != 201:
+                    print(f"    ! file upload failed for {file_path.name} ({upload.status_code})")
+                    continue
+                file_ids.append(upload.get_json()["file_id"])
 
-            # Upload the file and attach it to the item.
-            with open(file_path, "rb") as handle:
-                upload = client.post(
-                    "/upload-file/",
-                    data={
-                        "item_id": item_id,
-                        "replace_file": "null",
-                        "file": (io.BytesIO(handle.read()), file_path.name),
-                    },
-                    content_type="multipart/form-data",
-                )
-            if upload.status_code != 201:
-                print(f"    ! file upload failed ({upload.status_code})")
-                continue
-            file_id = upload.get_json()["file_id"]
-
-            # Create a data block, wire in the uploaded file, and render it.
+            # Create the data block, wire in the uploaded file(s) and any extra
+            # block fields, then render it.
             add = client.post(
                 "/add-data-block/",
                 json={"block_type": block_type, "item_id": item_id, "index": 0},
@@ -287,10 +475,18 @@ def seed(_):
                 print(f"    ! adding {block_type} block failed ({add.status_code})")
                 continue
             block_data = add.get_json()["new_block_obj"]
-            block_data["file_id"] = file_id
+            if len(file_ids) == 1:
+                block_data["file_id"] = file_ids[0]
+            elif len(file_ids) > 1:
+                # Multi-file blocks (e.g. uv-vis) read the ordered file list.
+                block_data["file_ids"] = file_ids
+                block_data["selected_file_order"] = file_ids
+            block_data.update(spec["block_data"])
+
             update = client.post("/update-block/", json={"block_data": block_data})
+            detail = f"{len(file_ids)} file(s)" if file_ids else "no file"
             if update.status_code == 200:
-                print(f"    ✓ attached {file_path.name} and rendered {block_type} block")
+                print(f"    ✓ rendered {block_type} block ({detail})")
             else:
                 print(f"    ! rendering {block_type} block failed ({update.status_code})")
 
