@@ -214,6 +214,9 @@ export default createStore({
       // payload should have the following fields:
       // collection_id, data, child_items
       state.all_collection_data[payload.collection_id] = payload.data;
+      if (payload.child_items !== undefined) {
+        state.all_collection_children[payload.collection_id] = payload.child_items;
+      }
       state.saved_status_collections[payload.collection_id] = true;
     },
     setCollectionSampleList(state, payload) {

@@ -61,14 +61,12 @@
       ]"
       :show-buttons="true"
       :collection-id="collection_id"
-      @remove-selected-items-from-collection="handleItemsRemovedFromCollection"
     />
   </div>
 </template>
 
 <script>
 import { createComputedSetterForCollectionField } from "@/field_utils.js";
-import { getCollectionSampleList } from "@/server_fetch_utils";
 import TiptapInline from "@/components/TiptapInline";
 import Creators from "@/components/Creators";
 import CollectionRelationshipVisualization from "@/components/CollectionRelationshipVisualization";
@@ -148,23 +146,6 @@ export default {
     collectionRefcode() {
       const collection = this.$store.state.all_collection_data[this.collection_id];
       return collection?.refcode || null;
-    },
-  },
-  created() {
-    this.getCollectionChildren();
-  },
-  methods: {
-    getCollectionChildren() {
-      getCollectionSampleList(this.collection_id)
-        .then(() => {
-          this.tableIsReady = true;
-        })
-        .catch(() => {
-          this.fetchError = true;
-        });
-    },
-    handleItemsRemovedFromCollection() {
-      this.getCollectionChildren();
     },
   },
 };
