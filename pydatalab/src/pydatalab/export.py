@@ -1,12 +1,10 @@
 """This module implements methods for exporting datalab data
 to other formats, such as .eln files.
-
 """
 
 import json
-import shutil
-import tempfile
 import zipfile
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,54 +21,122 @@ from pydatalab.routes.v0_1.items import (
 
 __all__ = ("generate_ro_crate_metadata", "create_eln_file")
 
+StageCallback = Callable[..., None]
+"""A callback invoked with progress messages as the export proceeds.
 
-def write_eln_file(root_folder_name, items, info, output_path) -> None:
+Called as ``on_stage(message, level="info")`` where ``level`` is one of
+``"info"``, ``"warning"`` or ``"error"``. Used to report per-entry progress back
+to the caller (e.g. to persist stages on the export task).
+"""
+
+ALTERNATIVE_REPRESENTATION_PATTERNS: tuple[str, ...] = ("*.bdf.parquet",)
+"""Glob patterns for alternative/derived representations of an uploaded file.
+
+Each uploaded file lives in its own directory keyed by its database ID, and some
+blocks write derived representations of the data alongside the original (for
+example, the echem block writes a ``*.bdf.parquet`` cache next to the source
+file). Any sibling matching one of these patterns is included in the export and
+described as a file in its own right. Extend this tuple to capture further
+representation formats.
+"""
+
+
+def find_alternative_representations(source_path: Path) -> list[Path]:
+    """Find alternative representation files stored alongside ``source_path``.
+
+    Looks in the same directory as the file for siblings matching any of the
+    configured :data:`ALTERNATIVE_REPRESENTATION_PATTERNS`, excluding the source
+    file itself.
+
+    Parameters:
+        source_path: The on-disk location of the original uploaded file.
+
+    Returns:
+        A sorted, de-duplicated list of matching sibling paths.
+
+    """
+    file_dir = source_path.parent
+    matches: list[Path] = []
+    seen: set[Path] = set()
+    for pattern in ALTERNATIVE_REPRESENTATION_PATTERNS:
+        for match in file_dir.glob(pattern):
+            if match == source_path or match in seen or not match.is_file():
+                continue
+            seen.add(match)
+            matches.append(match)
+
+    return sorted(matches)
+
+
+def write_eln_file(
+    root_folder_name, items, info, output_path, on_stage=None, primary_key="item_id"
+) -> None:
     """Write an ELN file to disk containing the given items and collection metadata.
-    Will first write to an intermediate temporary directory.
+
+    Each entry is streamed directly into the output zip archive as it is
+    processed, rather than first being staged in an intermediate directory.
+    This avoids copying every uploaded file twice and keeping a second full copy
+    of the export on disk.
 
     Parameters:
         root_folder_name: The name of the root folder in the ELN file.
         items: List of items to include in the ELN file, with all metadata and file info included.
         info: Metadata for the collection (or item) being exported.
         output_path: Path where the .eln file should be saved.
+        on_stage: Optional `StageCallback` invoked with a progress message
+            as each entry is archived.
+        primary_key: The item field used to key item folders in the archive
+            (`"item_id"` by default, the human-friendly identifier, or
+            `"refcode"` for stable, immutable identifiers).
 
     """
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
+    total = len(items)
+    root_folder = Path(root_folder_name)
 
-        root_folder = temp_path / root_folder_name
-        root_folder.mkdir()
+    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_STORED) as zipf:
+        ro_crate_metadata = generate_ro_crate_metadata(info, items, primary_key=primary_key)
+        zipf.writestr(
+            str(root_folder / "ro-crate-metadata.json"),
+            json.dumps(ro_crate_metadata, ensure_ascii=False, indent=2),
+        )
 
-        ro_crate_metadata = generate_ro_crate_metadata(info, items)
-        with open(root_folder / "ro-crate-metadata.json", "w", encoding="utf-8") as f:
-            json.dump(ro_crate_metadata, f, ensure_ascii=False)
+        # Emit ~10 progress stages across the whole export regardless of size, so
+        # the stored `stages` list stays small (and well clear of MongoDB's 16MB
+        # document limit) for large collections.
+        stage_interval = max(1, total // 10)
 
-        for item in items:
-            item_folder = root_folder / item["refcode"]
-            item_folder.mkdir()
+        for ind, item in enumerate(items):
+            if on_stage is not None and (ind % stage_interval == 0 or ind == total - 1):
+                on_stage(f"Archiving entry {ind + 1}/{total}: {item[primary_key]}")
+
+            item_folder = root_folder / item[primary_key]
 
             item_metadata = ITEM_MODELS[item.get("type")](**item).json(indent=2)
-
-            with open(item_folder / "metadata.json", "w", encoding="utf-8") as f:
-                f.write(item_metadata)
+            zipf.writestr(str(item_folder / "metadata.json"), item_metadata)
 
             for file in item.get("files", []):
                 source_path = Path(file["location"])
                 if source_path.exists():
-                    dest_file = item_folder / file["name"]
-                    shutil.copy2(source_path, dest_file)
+                    zipf.write(source_path, str(item_folder / file["name"]))
+
+                    # Include any alternative representations stored alongside the file.
+                    for alt in find_alternative_representations(source_path):
+                        zipf.write(alt, str(item_folder / alt.name))
                 else:
                     LOGGER.warning("ELN export: File not found on disk: %s", file["location"])
+                    if on_stage is not None:
+                        on_stage(
+                            f"File not found on disk, skipping: {file['name']}", level="warning"
+                        )
 
-        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for file_path in root_folder.rglob("*"):
-                if file_path.is_file():
-                    arcname = file_path.relative_to(temp_path)
-                    zipf.write(file_path, arcname)
+        if on_stage is not None:
+            on_stage(f"Finished archiving {total} entries")
 
 
-def generate_ro_crate_metadata(collection_data: dict, child_items: list[dict]) -> dict:
+def generate_ro_crate_metadata(
+    collection_data: dict, child_items: list[dict], primary_key: str = "item_id"
+) -> dict:
     """Generate RO-Crate metadata for the .eln file.
 
     Parameters:
@@ -85,7 +151,7 @@ def generate_ro_crate_metadata(collection_data: dict, child_items: list[dict]) -
     for item in child_items:
         experiments.append(
             {
-                "@id": f"./{item['refcode']}/",
+                "@id": f"./{item[primary_key]}/",
             }
         )
 
@@ -133,10 +199,10 @@ def generate_ro_crate_metadata(collection_data: dict, child_items: list[dict]) -
     people = {}
 
     for item in child_items:
-        identifier = f"{CONFIG.IDENTIFIER_PREFIX}:{item['refcode']}"
+        identifier = item["refcode"]
 
         item_metadata = {
-            "@id": f"./{item['refcode']}/",
+            "@id": f"./{item[primary_key]}/",
             "@type": "Dataset",
             "name": item.get("name", item["item_id"]),
             "identifier": identifier,
@@ -164,7 +230,7 @@ def generate_ro_crate_metadata(collection_data: dict, child_items: list[dict]) -
         files = []
         files_metadata: list[dict] = []
         for file in item.get("files", []):
-            file_id = f"./{item['refcode']}/{file['name']}"
+            file_id = f"./{item[primary_key]}/{file['name']}"
             files.append({"@id": file_id})
 
             file_metadata = {
@@ -179,13 +245,32 @@ def generate_ro_crate_metadata(collection_data: dict, child_items: list[dict]) -
 
             files_metadata.append(file_metadata)
 
+            # Describe any alternative representations stored alongside the file.
+            if file.get("location"):
+                for alt in find_alternative_representations(Path(file["location"])):
+                    alt_id = f"./{item[primary_key]}/{alt.name}"
+                    files.append({"@id": alt_id})
+
+                    alt_metadata = {
+                        "@id": alt_id,
+                        "@type": "File",
+                        "contentSize": alt.stat().st_size,
+                        "name": alt.name,
+                        "description": f"Alternative representation of {file['name']}",
+                    }
+
+                    alt_mtime = datetime.fromtimestamp(alt.stat().st_mtime, tz=timezone.utc)
+                    alt_metadata["dateCreated"] = alt_mtime.isoformat()
+
+                    files_metadata.append(alt_metadata)
+
         # Add file for datalab metadata
         item_metadata_file = {
-            "@id": f"./{item['refcode']}/metadata.json",
+            "@id": f"./{item[primary_key]}/metadata.json",
             "@type": "File",
             "name": "metadata.json",
             "encodingFormat": "application/json",
-            "description": f"Metadata for item {item['refcode']}",
+            "description": f"Metadata for item {item['refcode']} / {item['item_id']}",
         }
 
         files.append({"@id": item_metadata_file["@id"]})
@@ -197,27 +282,28 @@ def generate_ro_crate_metadata(collection_data: dict, child_items: list[dict]) -
         graph.append(item_metadata)
         if files_metadata:
             graph.extend(files_metadata)
-        if people:
-            graph.extend(people.values())
 
-        create_action = {
-            "@id": "#ro-crate-created",
-            "@type": "CreateAction",
-            "object": {"@id": "./"},
-            "endTime": datetime.now(tz=timezone.utc).isoformat(),
-            "instrument": {"@id": "https://datalab-org.io"},
-            "actionStatus": {"@id": "http://schema.org/CompletedActionStatus"},
-        }
+    create_action = {
+        "@id": "#ro-crate-created",
+        "@type": "CreateAction",
+        "object": {"@id": "./"},
+        "endTime": datetime.now(tz=timezone.utc).isoformat(),
+        "instrument": {"@id": "https://datalab-org.io"},
+        "actionStatus": {"@id": "http://schema.org/CompletedActionStatus"},
+    }
 
-        software = {
-            "@id": "https://datalab-org.io",
-            "@type": "SoftwareApplication",
-            "name": "datalab",
-            "version": __version__,
-        }
+    software = {
+        "@id": "https://datalab-org.io",
+        "@type": "SoftwareApplication",
+        "name": "datalab",
+        "version": __version__,
+    }
 
-        graph.append(create_action)
-        graph.append(software)
+    graph.append(create_action)
+    graph.append(software)
+
+    if people:
+        graph.extend(people.values())
 
     return metadata
 
@@ -227,6 +313,8 @@ def create_eln_file(
     collection_id: str | None = None,
     item_id: str | None = None,
     related_item_ids: list[str] | None = None,
+    on_stage: "StageCallback | None" = None,
+    primary_key: str = "item_id",
 ) -> None:
     """Create a .eln file for a collection, item, or set of items.
 
@@ -235,6 +323,10 @@ def create_eln_file(
         output_path: Path where the .eln file should be saved
         item_id: ID of the item to export
         related_item_ids: List of related item IDs to include in the export.
+        on_stage: Optional `StageCallback` invoked with progress messages
+            as the export proceeds.
+        primary_key: The item field used to key item folders in the archive
+            (`"item_id"` by default, or `"refcode"` for stable identifiers).
 
     """
     if not collection_id and not item_id:
@@ -332,4 +424,14 @@ def create_eln_file(
 
     all_items = _all_items
 
-    write_eln_file(root_folder_name, all_items, collection_data, output_path)
+    if on_stage is not None:
+        on_stage(f"Resolved {len(all_items)} entries for export")
+
+    write_eln_file(
+        root_folder_name,
+        all_items,
+        collection_data,
+        output_path,
+        on_stage=on_stage,
+        primary_key=primary_key,
+    )
