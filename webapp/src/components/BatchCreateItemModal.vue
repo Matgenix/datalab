@@ -342,7 +342,7 @@ import Modal from "@/components/Modal.vue";
 import { DialogService } from "@/services/DialogService.js";
 import ItemSelect from "@/components/ItemSelect.vue";
 import { createNewSamples } from "@/server_fetch_utils.js";
-import { validateEntryID } from "@/field_utils.js";
+import { validateEntryID, dateTimeFormatter, dateTimeParser } from "@/field_utils.js";
 import { itemTypes, SAMPLE_TABLE_TYPES, AUTOMATICALLY_GENERATE_ID_DEFAULT } from "@/resources.js";
 export default {
   name: "BatchCreateItemModal",
@@ -361,7 +361,7 @@ export default {
   data() {
     return {
       beforeSubmit: true,
-      epochStart: new Date("1970-01-01").toISOString().slice(0, -8),
+      epochStart: dateTimeParser(new Date("1970-01-01").toISOString()),
       oneYearOn: this.determineOneYearOn(),
       nSamples: 3,
       generateIDsAutomatically: AUTOMATICALLY_GENERATE_ID_DEFAULT,
@@ -476,13 +476,15 @@ export default {
   },
   methods: {
     now() {
-      return new Date().toISOString().slice(0, -8);
+      // returns a timestamp for right now, in the user's local time
+      // (datetime-local inputs are wall-clock, so we must not feed them UTC)
+      return dateTimeParser(new Date().toISOString());
     },
     determineOneYearOn() {
-      // returns a timestamp 1 year from now
+      // returns a timestamp 1 year from now, in the user's local time
       let d = new Date();
       d.setFullYear(d.getFullYear() + 1);
-      return d.toISOString().slice(0, -8);
+      return dateTimeParser(d.toISOString());
     },
     applyIdTemplate() {
       this.items.forEach((item, i) => {
@@ -552,7 +554,7 @@ export default {
         newSampleDatas = this.items.map((item) => {
           return {
             item_id: item.item_id,
-            date: item.date,
+            date: dateTimeFormatter(item.date),
             name: item.name,
             type: "samples",
             synthesis_constituents: item.components
@@ -564,7 +566,7 @@ export default {
         newSampleDatas = this.items.map((item) => {
           return {
             item_id: item.item_id,
-            date: item.date,
+            date: dateTimeFormatter(item.date),
             name: item.name,
             type: "cells",
             positive_electrode: item.positiveElectrode

@@ -100,7 +100,7 @@ import { DialogService } from "@/services/DialogService";
 import Modal from "@/components/Modal.vue";
 import ItemSelect from "@/components/ItemSelect.vue";
 import { createNewItem } from "@/server_fetch_utils.js";
-import { validateEntryID } from "@/field_utils.js";
+import { validateEntryID, dateTimeFormatter, dateTimeParser } from "@/field_utils.js";
 import { itemTypes } from "@/resources.js";
 // import CollectionSelect from "@/components/CollectionSelect.vue";
 export default {
@@ -124,7 +124,7 @@ export default {
       // startInCollection: null,
       takenItemIds: [], // this holds ids that have been tried, whereas the computed takenEquipmentIds holds ids in the equipment table
       selectedItemToCopy: null,
-      agesAgo: new Date("1970-01-01").toISOString().slice(0, -8), // a datetime for the unix epoch start
+      agesAgo: dateTimeParser(new Date("1970-01-01").toISOString()), // a datetime for the unix epoch start
       //this is all just to filter an object in javascript:
       availableTypes: { equipment: itemTypes["equipment"] },
     };
@@ -163,7 +163,7 @@ export default {
       await createNewItem(
         this.item_id,
         this.item_type,
-        this.date,
+        dateTimeFormatter(this.date),
         this.name,
         null, // no startingCollection
         {}, // no extra data
@@ -199,14 +199,15 @@ export default {
         });
     },
     oneYearOn() {
-      // returns a timestamp 1 year from now
+      // returns a timestamp 1 year from now, in the user's local time
       let d = new Date();
       d.setFullYear(d.getFullYear() + 1);
-      return d.toISOString().slice(0, -8);
+      return dateTimeParser(d.toISOString());
     },
     now() {
-      // returns a timestamp for right now
-      return new Date().toISOString().slice(0, -8);
+      // returns a timestamp for right now, in the user's local time
+      // (datetime-local inputs are wall-clock, so we must not feed them UTC)
+      return dateTimeParser(new Date().toISOString());
     },
 
     setCopiedName() {
