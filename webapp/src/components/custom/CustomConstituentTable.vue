@@ -1,22 +1,26 @@
 <template>
-  <table style="width: 600px" class="table table-sm borderless">
+  <table class="table table-sm borderless" :style="{ width: tableWidth }">
     <colgroup>
-      <col span="1" style="width: 300px" />
-      <col span="1" style="width: 75px" />
-      <col span="1" style="width: 50px" />
+      <col span="1" style="width: 320px" />
+      <col span="1" style="width: 90px" />
+      <col span="1" style="width: 95px" />
+      <col v-for="col in extraColumns" :key="col.name" span="1" style="width: 110px" />
       <col span="1" style="width: 25px" />
     </colgroup>
+    <thead>
+      <tr class="table-header-row">
+        <th class="text-muted small fw-normal">Compound</th>
+        <th class="text-muted small fw-normal">{{ quantityLabel || "Quantity" }}</th>
+        <th class="text-muted small fw-normal">Unit</th>
+        <th v-for="col in extraColumns" :key="col.name" class="text-muted small fw-normal">
+          {{ col.title }}
+        </th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
       <tr v-for="(constituent, index) in constituents" :key="index">
         <td>
-          <!-- <transition name="fade"> -->
-          <!--             <font-awesome-icon
-              v-if="!selectShown[index]"
-              :icon="['fas', 'search']"
-              class="swap-constituent-icon"
-              @click="turnOnRowSelect(index)"
-            /> -->
-          <!-- </transition> -->
           <ItemSelect
             v-if="selectShown[index]"
             :ref="`select${index}`"
@@ -32,37 +36,70 @@
             :item_id="constituent.item.item_id"
             :item-type="constituent.item.type"
             :name="constituent.item.name"
-            :chemform="constituent.item.chemform || ''"
+            :chemform="''"
             :smiles="constituent.item.smiles"
             :inchi-key="constituent.item.inchi_key"
             :ghs-codes="constituent.item.GHS_codes"
             :molar-mass="constituent.item.molar_mass"
             :cas="constituent.item.CAS"
-            :max-length="25"
-            enable-click
+            :max-length="35"
             enable-modified-click
             @dblclick="turnOnRowSelect(index)"
           />
         </td>
-        <!--         <td>
-          <ChemicalFormula :formula="constituent.item?.chemform" />
-        </td> -->
         <td>
           <input
-            v-model="constituent.quantity"
+            :value="constituent[quantityField] ?? ''"
             class="form-control form-control-sm quantity-input"
-            :class="{ 'red-border': isNaN(constituent.quantity) }"
-            placeholder="quantity"
+            :class="{ 'red-border': isNaN(constituent[quantityField]) }"
+            type="number"
+            step="any"
+            placeholder="—"
+            @change="
+              constituent[quantityField] =
+                $event.target.value === '' ? null : Number($event.target.value)
+            "
           />
         </td>
         <td>
+          <select
+            v-if="unitOptions"
+            v-model="constituent.unit"
+            class="form-control form-control-sm"
+          >
+            <option v-for="u in unitOptions" :key="u" :value="u">{{ u }}</option>
+          </select>
           <input
+            v-else
             v-model="constituent.unit"
             class="form-control form-control-sm"
             placeholder="unit"
           />
         </td>
-
+        <td v-for="col in extraColumns" :key="col.name">
+          <span v-if="col.readOnly" class="form-control-plaintext form-control-sm text-muted">
+            {{ constituent[col.name] ?? "—" }}
+          </span>
+          <input
+            v-else-if="col.type === 'number' || col.type === 'integer'"
+            :value="constituent[col.name] ?? ''"
+            type="number"
+            step="any"
+            class="form-control form-control-sm"
+            placeholder="—"
+            @change="
+              constituent[col.name] =
+                $event.target.value === '' ? null : Number($event.target.value)
+            "
+          />
+          <input
+            v-else
+            v-model="constituent[col.name]"
+            type="text"
+            class="form-control form-control-sm"
+            placeholder="—"
+          />
+        </td>
         <td>
           <button
             type="button"
@@ -112,6 +149,7 @@ import FormattedItemName from "@/components/FormattedItemName.vue";
 import { OnClickOutside } from "@vueuse/components";
 
 export default {
+  name: "CustomConstituentTable",
   components: {
     ItemSelect,
     FormattedItemName,
@@ -126,6 +164,26 @@ export default {
       type: Array,
       default: () => ["samples", "starting_materials", "cells"],
     },
+    unitOptions: {
+      type: Array,
+      default: null,
+    },
+    defaultUnit: {
+      type: String,
+      default: "g",
+    },
+    quantityField: {
+      type: String,
+      default: "quantity",
+    },
+    quantityLabel: {
+      type: String,
+      default: "Quantity",
+    },
+    extraColumns: {
+      type: Array,
+      default: () => [],
+    },
   },
   emits: ["update:modelValue"],
   data() {
@@ -137,6 +195,10 @@ export default {
     };
   },
   computed: {
+    tableWidth() {
+      // 320 (compound) + 90 (qty) + 95 (unit) + 110*extra + 25 (delete)
+      return 530 + this.extraColumns.length * 110 + "px";
+    },
     newSelectIsShown() {
       return this.constituents.length == 0 || this.addNewConstituentIsActive;
     },
@@ -154,10 +216,15 @@ export default {
   },
   methods: {
     addConstituent(selectedItem) {
+      const extraData = {};
+      this.extraColumns.forEach((col) => {
+        extraData[col.name] = null;
+      });
       this.constituents.push({
         item: selectedItem,
-        quantity: null,
-        unit: "g",
+        [this.quantityField]: null,
+        unit: this.defaultUnit,
+        ...extraData,
       });
       this.selectedNewConstituent = null;
       this.selectShown.push(false);
@@ -167,8 +234,7 @@ export default {
       this.selectShown[index] = true;
       this.selectedChangedConstituent = this.constituents[index].item;
       this.$nextTick(function () {
-        // unfortunately this seems to be the "official" way to focus on the select element:
-        this.$refs[`select${index}`].$refs.selectComponent.$refs.search.focus();
+        this.$refs[`select${index}`]?.$refs?.selectComponent?.$refs?.search?.focus();
       });
     },
     swapConstituent(selectedItem, index) {
@@ -189,6 +255,14 @@ export default {
 </script>
 
 <style scoped>
+.table-header-row th {
+  padding: 0 0.2rem 0.3rem 0.2rem;
+  border-bottom: 1px solid #dee2e6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 td {
   padding: 0.2rem !important;
 }
