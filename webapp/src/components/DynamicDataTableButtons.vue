@@ -88,6 +88,12 @@
       <div class="button-bar-spacer"></div>
 
       <div class="search-settings-group">
+        <AdvancedQueryBuilder
+          v-if="dataType === 'samples'"
+          :list-view="'samples'"
+          @query-results="$emit('advanced-query-results', $event)"
+        />
+
         <IconField class="search-field">
           <InputIcon>
             <font-awesome-icon icon="search" />
@@ -300,6 +306,7 @@ import "primeicons/primeicons.css";
 import BulkChangeRoleModal from "@/components/BulkChangeRoleModal.vue";
 import BulkAddToGroupModal from "@/components/BulkAddToGroupModal.vue";
 import BulkChangeManagersModal from "@/components/BulkChangeManagersModal.vue";
+import AdvancedQueryBuilder from "@/components/AdvancedQueryBuilder.vue";
 
 import {
   deleteSample,
@@ -324,6 +331,7 @@ export default {
     BulkChangeRoleModal,
     BulkAddToGroupModal,
     BulkChangeManagersModal,
+    AdvancedQueryBuilder,
   },
   props: {
     dataType: {
@@ -386,6 +394,7 @@ export default {
     "users-data-changed",
     "bulk-invalidate-tokens",
     "bulk-delete-groups",
+    "advanced-query-results",
   ],
   data() {
     return {

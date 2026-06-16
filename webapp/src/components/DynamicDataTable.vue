@@ -9,7 +9,7 @@
       v-model:filters="filters"
       v-model:selection="itemsSelected"
       v-model:select-all="allSelected"
-      :value="data"
+      :value="advancedQueryResults !== null ? advancedQueryResults : data"
       :data-testid="computedDataTestId"
       selection-mode="checkbox"
       paginator
@@ -62,6 +62,7 @@
           @users-data-changed="$emit('users-data-changed')"
           @bulk-invalidate-tokens="handleItemsUpdated"
           @bulk-delete-groups="$emit('groups-data-changed')"
+          @advanced-query-results="handleAdvancedQueryResults"
         />
       </template>
       <template #loading>
@@ -707,6 +708,7 @@ export default {
       addToCollectionModalIsOpen: false,
       batchShareModalIsOpen: false,
       isSampleFetchError: false,
+      advancedQueryResults: null,
       itemsSelected: [],
       allSelected: false,
       filters: {
@@ -1597,6 +1599,9 @@ export default {
       this.$nextTick(() => {
         location.reload();
       });
+    },
+    handleAdvancedQueryResults(items) {
+      this.advancedQueryResults = items;
     },
     handleDateFilterModeChange(field) {
       this.filters[field].constraints[0].value = null;
