@@ -123,8 +123,7 @@ A worked example of both a `Sample` subclass and a standalone `Item` subclass li
 
 ### Rendering a custom type in the web UI
 
-The web UI renders a custom type's extra fields **automatically, from the model alone — no
-JavaScript required**. On startup the frontend reads `/info/types`, registers every custom type,
+The web UI renders a custom type's extra fields automatically. On startup the frontend reads `/info/types`, registers every custom type,
 and on the edit page shows:
 
 - the **base item component** — the same name / refcode / relationships block used by the
@@ -197,8 +196,8 @@ class AnnealingProtocol(Sample):
 
 ### Custom panels (full control)
 
-When annotations aren't enough — structured tables, values computed in the browser, plots, or
-actions that pull data from a linked item — a plugin can ship its own Vue component, which takes
+When annotations aren't enough (structured tables, values computed in the browser, plots, or
+actions that pull data from a linked item), a plugin can ship its own Vue component, which takes
 over rendering of the custom area entirely (the base item component is still shown above it).
 
 Place a `<ClassName>Panel.vue` in a `webapp/` directory beside the models, where `<ClassName>` is
@@ -246,8 +245,6 @@ custom type, copies its parameters with a "Populate from …" button, and draws 
     installing a UI plugin means rebuilding the webapp (run `datalab-collect-plugin-panels`
     before `vue-cli-service build`). Only install panels from sources you trust.
 
-Still planned for the future: richer semantic annotations and URIs for fields, and cross-linking
-between items via fully custom relationships.
 
 ## Plugin installation
 
