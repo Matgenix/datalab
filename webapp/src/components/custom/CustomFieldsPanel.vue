@@ -1,18 +1,25 @@
 <template>
   <div v-if="customFields.length > 0" class="container custom-fields-panel mt-3">
-    <div class="plugin-card">
-      <div
-        v-if="sectionTitle"
-        class="plugin-card-header d-flex align-items-center justify-content-between"
-      >
-        <span>{{ sectionTitle }}</span>
-        <slot name="header-actions" />
+    <div
+      v-for="(section, sIdx) in sections"
+      :key="section.title || sIdx"
+      class="plugin-card"
+      :class="{ 'mt-3': sIdx > 0 }"
+    >
+      <div v-if="section.title" class="plugin-card-header">
+        <span>{{ section.title }}</span>
       </div>
       <hr v-else class="mt-0" />
       <div class="plugin-card-body">
-        <!-- Scalar fields: ref selectors, numbers, strings, enums, booleans -->
-        <div v-if="scalarFields.length > 0" class="form-row mb-2">
-          <div v-for="field in scalarFields" :key="field.name" class="form-group col-md-6 col-lg-4">
+        <!-- Renders scalar fields only: item-reference selectors, numbers, strings, enums,
+             booleans. Structural fields (lists, nested objects) need a custom plugin panel.
+             Fields can be grouped into separate cards via the `datalab_section` annotation. -->
+        <div class="form-row mb-2">
+          <div
+            v-for="field in section.fields"
+            :key="field.name"
+            class="form-group col-md-6 col-lg-4"
+          >
             <label :for="'custom-' + field.name">{{ field.title }}</label>
 
             <!-- Read-only -->
@@ -23,15 +30,15 @@
             <!-- Item reference: fixed link when selected, dropdown when empty -->
             <div v-else-if="field.refTypes">
               <div v-if="itemData[field.name]" class="input-group">
-                <router-link
-                  :to="`/edit/${itemData[field.name].item_id}`"
-                  class="form-control ref-display"
-                >
-                  <span class="badge badge-secondary mr-2">{{
-                    itemData[field.name].refcode || itemData[field.name].item_id
-                  }}</span>
-                  {{ itemData[field.name].name || "" }}
-                </router-link>
+                <div class="form-control ref-display">
+                  <FormattedItemName
+                    :item_id="itemData[field.name].item_id"
+                    :item-type="itemData[field.name].type"
+                    :name="itemData[field.name].name || ''"
+                    enable-click
+                    enable-modified-click
+                  />
+                </div>
                 <div class="input-group-append">
                   <button
                     type="button"
@@ -119,6 +126,16 @@
               "
             />
 
+            <!-- Multi-line string (datalab_multiline) -->
+            <textarea
+              v-else-if="field.multiline"
+              :id="'custom-' + field.name"
+              class="form-control"
+              rows="2"
+              :value="itemData[field.name] ?? ''"
+              @change="updateField(field.name, $event.target.value || null)"
+            ></textarea>
+
             <!-- String (default) -->
             <input
               v-else
@@ -130,23 +147,6 @@
             />
           </div>
         </div>
-
-        <!-- Constituent tables: always below scalar fields, full width -->
-        <div v-for="field in tableFields" :key="field.name" class="mb-3 table-wrapper">
-          <div class="d-flex align-items-center justify-content-between mb-1">
-            <label class="mb-0">{{ field.title }}</label>
-            <slot :name="`table-actions-${field.name}`" />
-          </div>
-          <CustomConstituentTable
-            :model-value="itemData[field.name] || []"
-            :types-to-query="field.typesToQuery"
-            :unit-options="field.constituentUnitOptions"
-            :default-unit="field.constituentDefaultUnit"
-            :quantity-field="field.constituentQuantityField"
-            :quantity-label="field.constituentQuantityLabel"
-            :extra-columns="field.constituentExtraColumns"
-          />
-        </div>
       </div>
       <!-- plugin-card-body -->
     </div>
@@ -157,7 +157,7 @@
 <script>
 import { itemTypes, prettifyType } from "@/resources.js";
 import ItemSelect from "@/components/ItemSelect.vue";
-import CustomConstituentTable from "./CustomConstituentTable.vue";
+import FormattedItemName from "@/components/FormattedItemName.vue";
 
 // Pydantic v2 emits nullable fields as anyOf: [{type: X}, {type: "null"}].
 function unwrapNullable(schema) {
@@ -171,69 +171,13 @@ function unwrapNullable(schema) {
   return { schema, nullable: false };
 }
 
-// Resolve a JSON Schema $ref against the type's $defs map.
-function resolveRef(ref, defs) {
-  if (!ref || !defs) return {};
-  const name = ref.replace(/^#\/\$defs\//, "");
-  return defs[name] || {};
-}
+// CustomFieldsPanel renders these directly; anything else (arrays, nested objects) is the
+// responsibility of a custom plugin panel (a .vue component shipped by the plugin).
+const SCALAR_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
-function resolveField(name, rawSchema, defs) {
+function resolveField(name, rawSchema) {
   const { schema } = unwrapNullable(rawSchema);
   const extra = rawSchema["x-json_schema_extra"] || rawSchema;
-  const widget = extra.datalab_widget || null;
-
-  // Constituent table: prefer explicit annotation (units/default_unit on the list field,
-  // like the voltage pattern) over schema inference — avoids fragile $ref resolution.
-  const BASE_CONSTITUENT_FIELDS = new Set(["item", "quantity", "unit"]);
-  let typesToQuery = null;
-  let constituentUnitOptions = null;
-  let constituentDefaultUnit = "g";
-  let constituentQuantityField = "quantity";
-  let constituentQuantityLabel = "Quantity";
-  let constituentExtraColumns = [];
-  if (widget === "constituent-table") {
-    typesToQuery = extra.datalab_constituent_types || ["samples", "starting_materials"];
-    // Always resolve the items sub-schema — needed for extra columns.
-    const itemsRaw = schema.items || {};
-    const itemsSchema = itemsRaw.$ref ? resolveRef(itemsRaw.$ref, defs) : itemsRaw;
-    if (extra.units) {
-      // Explicit annotation: units listed directly on the field (preferred).
-      constituentUnitOptions = extra.units;
-    } else {
-      // Fallback: infer from the items sub-schema's unit field enum.
-      const unitRaw = itemsSchema.properties?.unit || {};
-      const { schema: unitSchema } = unwrapNullable(unitRaw);
-      constituentUnitOptions = unitSchema.enum || null;
-    }
-    constituentDefaultUnit = extra.default_unit || constituentUnitOptions?.[0] || "g";
-    if (extra.datalab_quantity_field) {
-      constituentQuantityField = extra.datalab_quantity_field;
-      const qSchema = itemsSchema.properties?.[constituentQuantityField] || {};
-      constituentQuantityLabel = qSchema.title || constituentQuantityField;
-    }
-    // Extra columns: properties beyond base Constituent fields and the quantity field.
-    constituentExtraColumns = Object.entries(itemsSchema.properties || {})
-      .filter(([colName, colRawSchema]) => {
-        if (BASE_CONSTITUENT_FIELDS.has(colName)) return false;
-        if (colName === constituentQuantityField) return false;
-        const colExtra = colRawSchema["x-json_schema_extra"] || colRawSchema;
-        if (colExtra.datalab_hidden) return false;
-        return true;
-      })
-      .map(([colName, colRawSchema]) => {
-        const { schema: colSchema } = unwrapNullable(colRawSchema);
-        const extra = colRawSchema["x-json_schema_extra"] || colRawSchema;
-        return {
-          name: colName,
-          title: colRawSchema.title || prettifyType(colName),
-          type: colSchema.type || "string",
-          description: colRawSchema.description || null,
-          readOnly: extra.readOnly === true,
-        };
-      });
-  }
-
   return {
     name,
     title: rawSchema.title || prettifyType(name),
@@ -241,14 +185,11 @@ function resolveField(name, rawSchema, defs) {
     type: schema.type || "string",
     enum: schema.enum || null,
     readOnly: rawSchema.readOnly === true,
-    widget,
-    typesToQuery,
-    constituentUnitOptions,
-    constituentDefaultUnit,
-    constituentQuantityField,
-    constituentQuantityLabel,
-    constituentExtraColumns,
     refTypes: extra.datalab_ref_types || null,
+    // Optional grouping: fields sharing a `datalab_section` render in their own card.
+    section: extra.datalab_section || null,
+    // Render a long string as a multi-line <textarea> instead of a single-line input.
+    multiline: extra.datalab_multiline === true,
     // Number+unit compound widget
     unitField: extra.datalab_unit_field || null,
     unitOptions: extra.units || null,
@@ -258,7 +199,7 @@ function resolveField(name, rawSchema, defs) {
 
 export default {
   name: "CustomFieldsPanel",
-  components: { ItemSelect, CustomConstituentTable },
+  components: { ItemSelect, FormattedItemName },
   props: {
     item_id: { type: String, required: true },
     itemType: { type: String, required: true },
@@ -284,16 +225,9 @@ export default {
     sectionTitle() {
       return this.typeSchema?.datalab_section_title || null;
     },
-    scalarFields() {
-      return this.customFields.filter((f) => f.widget !== "constituent-table");
-    },
-    tableFields() {
-      return this.customFields.filter((f) => f.widget === "constituent-table");
-    },
     customFields() {
       if (!this.typeSchema || !this.baseSchema) return [];
       const typeProps = this.typeSchema.properties || {};
-      const defs = this.typeSchema.$defs || {};
       const baseProps = this.baseSchema ? Object.keys(this.baseSchema.properties || {}) : [];
 
       return Object.entries(typeProps)
@@ -301,9 +235,38 @@ export default {
           if (baseProps.includes(name) || name === "type") return false;
           const extra = schema["x-json_schema_extra"] || schema;
           if (extra.datalab_hidden) return false;
-          return true;
+          // Render only scalar-ish fields. Item references (datalab_ref_types) and enums
+          // are renderable too; structural fields (arrays/objects) need a custom panel.
+          const { schema: unwrapped } = unwrapNullable(schema);
+          const renderable =
+            !!extra.datalab_ref_types || !!unwrapped.enum || SCALAR_TYPES.has(unwrapped.type);
+          return renderable;
         })
-        .map(([name, schema]) => resolveField(name, schema, defs));
+        .map(([name, schema]) => resolveField(name, schema));
+    },
+    // Group fields into cards by their `datalab_section`. Ungrouped fields form the
+    // default card (titled by `datalab_section_title`), which always renders first;
+    // each distinct `datalab_section` then renders as its own titled card, in the order
+    // the sections first appear in the schema.
+    sections() {
+      const groups = new Map();
+      const order = [];
+      for (const field of this.customFields) {
+        const key = field.section || "__default__";
+        if (!groups.has(key)) {
+          groups.set(key, []);
+          order.push(key);
+        }
+        groups.get(key).push(field);
+      }
+      const result = [];
+      if (groups.has("__default__")) {
+        result.push({ title: this.sectionTitle, fields: groups.get("__default__") });
+      }
+      for (const key of order) {
+        if (key !== "__default__") result.push({ title: key, fields: groups.get(key) });
+      }
+      return result;
     },
   },
   methods: {
@@ -344,27 +307,18 @@ export default {
 .plugin-card-body {
   padding: 1rem;
 }
-.table-wrapper {
-  padding-left: 2.5rem;
-}
 .unit-select {
   border-left: 0;
   border-radius: 0 0.25rem 0.25rem 0;
   width: auto;
   min-width: 4.5rem;
 }
+/* Wraps a FormattedItemName so a selected reference reads as a filled field; the
+   badge inside is the click target, so this box is intentionally not itself a link. */
 .ref-display {
   display: flex;
   align-items: center;
   background-color: #f8f9fa;
-  color: inherit;
-  text-decoration: none;
-  cursor: pointer;
   flex: 1;
-}
-.ref-display:hover {
-  background-color: #e9ecef;
-  text-decoration: none;
-  color: inherit;
 }
 </style>

@@ -164,6 +164,21 @@ export function prettifyType(type) {
     .trim();
 }
 
+// Lighten a hex colour toward white to produce a pastel badge/tint background,
+// mirroring the hand-picked `lightColor` pastels of the built-in types. Used to give
+// custom (plugin) types a coloured badge derived from their `datalab_ui_color`.
+function lightTint(hex, amount = 0.82) {
+  const h = (hex || "").replace("#", "");
+  if (h.length !== 6) return "#e0e0e0";
+  const n = parseInt(h, 16);
+  if (Number.isNaN(n)) return "#e0e0e0";
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const mix = (c) => Math.round(c + (255 - c) * amount);
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
 // Register a custom/plugin item type (one served by the backend but not hardcoded
 // above) into the shared `itemTypes` registry.
 // - base_type: the built-in type string this model inherits from (e.g. "samples")
@@ -178,7 +193,7 @@ export function registerDynamicItemType(type, { title, base_type, hidden_fields,
     itemInformationComponent: BASE_TYPE_COMPONENTS[base_type] || null,
     navbarColor: color,
     navbarName: display,
-    lightColor: "#e0e0e0",
+    lightColor: lightTint(color),
     labelColor: color,
     isCreateable: true,
     display: display.toLowerCase(),
