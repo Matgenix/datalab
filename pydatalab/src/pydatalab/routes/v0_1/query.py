@@ -29,7 +29,6 @@ LIST_VIEWS: dict[str, dict] = {
 _SKIP_FIELDS: set[str] = {
     "type",
     "immutable_id",
-    "last_modified",
     "creator_ids",
     "group_ids",
     "blocks_obj",
@@ -43,10 +42,6 @@ _SKIP_FIELDS: set[str] = {
     "collections",
     "creators",
     "groups",
-    "synthesis_constituents",
-    "positive_electrode",
-    "negative_electrode",
-    "electrolyte",
 }
 
 _FIELD_UI: dict[str, dict] = {
@@ -107,7 +102,25 @@ _FIELD_UI: dict[str, dict] = {
         "group": "Synthesis",
         "sortable": False,
     },
+    "synthesis_constituents": {
+        "label": "Synthesis constituent",
+        "group": "Synthesis",
+        "sortable": False,
+    },
     "date_opened": {"label": "Date opened", "group": "Provenance", "sortable": True},
+    "last_modified": {"label": "Last modified", "group": "Basic", "sortable": True},
+    "active_ion_charge": {"label": "Active ion charge", "group": "Cell", "sortable": True},
+    "positive_electrode": {
+        "label": "Positive electrode constituent",
+        "group": "Cell",
+        "sortable": False,
+    },
+    "negative_electrode": {
+        "label": "Negative electrode constituent",
+        "group": "Cell",
+        "sortable": False,
+    },
+    "electrolyte": {"label": "Electrolyte constituent", "group": "Cell", "sortable": False},
 }
 
 OPERATORS: dict[str, dict] = {
@@ -168,6 +181,42 @@ OPERATORS: dict[str, dict] = {
         "value_required": True,
         "editor": "datetime-range",
         "compile": lambda p, v: _compile_date_range(p, v),
+    },
+    "has_constituent": {
+        "label": "contains",
+        "value_required": True,
+        "editor": "constituent-selector",
+        "options_source": "datalab:item-reference",
+        "compile": lambda p, v: {
+            p: {
+                "$elemMatch": {
+                    "$or": [
+                        {"item.refcode": str(v)},
+                        {"item.item_id": str(v)},
+                    ]
+                }
+            }
+        },
+    },
+    "not_has_constituent": {
+        "label": "does not contain",
+        "value_required": True,
+        "editor": "constituent-selector",
+        "options_source": "datalab:item-reference",
+        "compile": lambda p, v: {
+            "$nor": [
+                {
+                    p: {
+                        "$elemMatch": {
+                            "$or": [
+                                {"item.refcode": str(v)},
+                                {"item.item_id": str(v)},
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
     },
 }
 
@@ -266,6 +315,24 @@ def _build_field_registry(type_id: str) -> dict[str, dict]:
             "editor_override": editor_override,
             "value_schema_override": value_schema_override,
         }
+
+    _constituent_fields = {
+        "synthesis_constituents": ("Synthesis constituent", "Synthesis"),
+        "positive_electrode": ("Positive electrode constituent", "Cell"),
+        "negative_electrode": ("Negative electrode constituent", "Cell"),
+        "electrolyte": ("Electrolyte constituent", "Cell"),
+    }
+    for cf_name, (cf_label, cf_group) in _constituent_fields.items():
+        if cf_name in properties:
+            registry[cf_name] = {
+                "mongo_path": cf_name,
+                "label": cf_label,
+                "group": cf_group,
+                "sortable": False,
+                "operator_ids": ["has_constituent", "not_has_constituent"],
+                "editor_override": {},
+                "value_schema_override": {},
+            }
 
     return registry
 
@@ -445,6 +512,8 @@ def get_query_schema():
                 entry["editor"] = eo.get(op_id, op_def.get("editor", "text"))
             if op_id in vs_override:
                 entry["value_schema"] = vs_override[op_id]
+            if op_def.get("options_source"):
+                entry["options_source"] = op_def["options_source"]
             operators.append(entry)
         fields.append(
             {

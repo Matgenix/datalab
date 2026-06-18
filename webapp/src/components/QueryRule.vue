@@ -144,7 +144,7 @@ export default {
 <style scoped>
 .qr {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 36px;
+  grid-template-columns: 0.85fr 0.75fr 1.4fr 36px;
   gap: 10px;
   align-items: start;
   padding: 10px 10px;

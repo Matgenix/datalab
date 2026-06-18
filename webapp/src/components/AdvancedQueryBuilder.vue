@@ -9,7 +9,14 @@
       <span class="adv-trigger__label" :title="appliedSummary || ''">
         {{ appliedSummary || "Advanced Search" }}
       </span>
-      <font-awesome-icon icon="chevron-down" class="adv-trigger__chevron" />
+      <span
+        v-if="appliedSummary"
+        class="adv-trigger__clear"
+        title="Clear filters"
+        @click.stop="clearFilters"
+        >×</span
+      >
+      <font-awesome-icon v-else icon="chevron-down" class="adv-trigger__chevron" />
     </button>
 
     <Teleport to="body">
@@ -60,6 +67,24 @@
               </div>
 
               <template v-else-if="schema">
+                <div class="adv-sort-row">
+                  <span class="adv-section-label">Sort by</span>
+                  <select v-model="sortField" class="adv-sort-select">
+                    <option value="">Default (date, newest first)</option>
+                    <option v-for="f in sortableFields" :key="f.id" :value="f.id">
+                      {{ f.label }}
+                    </option>
+                  </select>
+                  <button
+                    v-if="sortField"
+                    class="adv-sort-dir"
+                    :title="sortDirection === 'desc' ? 'Descending' : 'Ascending'"
+                    @click="sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'"
+                  >
+                    {{ sortDirection === "desc" ? "↓ Desc" : "↑ Asc" }}
+                  </button>
+                </div>
+
                 <div class="adv-rules-area">
                   <div v-if="rootGroup.children.length" class="adv-rules-header">
                     <span>Field</span>
@@ -80,16 +105,21 @@
             </div>
 
             <div class="adv-modal__footer">
-              <span v-if="queryError" class="text-danger small me-auto">{{ queryError }}</span>
-              <button class="btn btn-sm btn-ghost" @click="closeAndReset">Cancel</button>
-              <button
-                class="btn btn-sm btn-primary px-4"
-                :disabled="queryLoading"
-                @click="submitQuery"
-              >
-                <font-awesome-icon v-if="queryLoading" icon="sync" spin class="me-1" />
-                <span v-else>Search</span>
-              </button>
+              <span v-if="queryError" class="adv-footer-error">{{ queryError }}</span>
+              <span v-else-if="previewCount !== null" class="adv-preview-count">
+                <font-awesome-icon v-if="previewLoading" icon="sync" spin class="me-1" />
+                <template v-else>Found: {{ previewCount }}</template>
+              </span>
+              <span v-else-if="previewLoading" class="adv-preview-count">
+                <font-awesome-icon icon="sync" spin class="me-1" /> Counting…
+              </span>
+              <div class="adv-footer-actions">
+                <button class="btn-ghost" @click="isOpen = false">Cancel</button>
+                <button class="btn-primary" :disabled="queryLoading" @click="submitQuery">
+                  <font-awesome-icon v-if="queryLoading" icon="sync" spin class="me-1" />
+                  <span v-else>Search</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -125,11 +155,30 @@ export default {
       queryLoading: false,
       queryError: null,
       appliedSummary: null,
+      sortField: "",
+      sortDirection: "desc",
+      previewCount: null,
+      previewLoading: false,
+      previewTimer: null,
     };
   },
   computed: {
     queryableTypes() {
       return this.itemTypes.filter((t) => t.queryable);
+    },
+    sortableFields() {
+      return (this.schema?.fields || []).filter((f) => f.sortable);
+    },
+  },
+  watch: {
+    rootGroup: {
+      deep: true,
+      handler() {
+        this.schedulePreview();
+      },
+    },
+    selectedType() {
+      this.schedulePreview();
     },
   },
   async mounted() {
@@ -147,10 +196,14 @@ export default {
       this.typesLoading = false;
     }
   },
+  beforeUnmount() {
+    clearTimeout(this.previewTimer);
+  },
   methods: {
     emptyGroup() {
       return { kind: "group", combinator: "and", children: [] };
     },
+
     async loadSchema(typeId) {
       this.schemaLoading = true;
       this.schemaError = null;
@@ -162,6 +215,7 @@ export default {
         this.schemaLoading = false;
       }
     },
+
     countStaleRules(node, validFieldIds) {
       if (node.kind === "rule") return validFieldIds.includes(node.field) ? 0 : 1;
       return (node.children || []).reduce(
@@ -169,6 +223,7 @@ export default {
         0,
       );
     },
+
     async onTypeChange(newTypeId) {
       if (!this.schema || !this.rootGroup.children.length) {
         this.selectedType = newTypeId;
@@ -186,6 +241,7 @@ export default {
       this.stalRulesCount = stale;
       this.pendingTypeChange = { typeId: newTypeId, schema: newSchema };
     },
+
     confirmTypeChange() {
       const { typeId, schema } = this.pendingTypeChange;
       this.selectedType = typeId;
@@ -193,9 +249,11 @@ export default {
       this.rootGroup = this.emptyGroup();
       this.pendingTypeChange = null;
     },
+
     cancelTypeChange() {
       this.pendingTypeChange = null;
     },
+
     stripInternalProps(node) {
       if (node.kind === "rule") {
         const { field, operator, value } = node;
@@ -209,6 +267,7 @@ export default {
         children: (node.children || []).map((c) => this.stripInternalProps(c)),
       };
     },
+
     buildSummary(node) {
       if (!this.schema) return null;
       if (node.kind === "rule") {
@@ -228,6 +287,7 @@ export default {
       }
       return null;
     },
+
     validateRules(node) {
       if (node.kind === "rule") {
         if (!node.field) return "Select a field for all rules.";
@@ -241,10 +301,7 @@ export default {
             v === null ||
             v === "" ||
             (Array.isArray(v) && v.filter(Boolean).length === 0);
-          if (isEmpty) {
-            const label = field?.label || node.field;
-            return `"${label}": value is required.`;
-          }
+          if (isEmpty) return `"${field?.label || node.field}": value is required.`;
           if (op.editor === "datetime-range") {
             const [from, to] = Array.isArray(v) ? v : ["", ""];
             if (!from) return `"${field?.label || node.field}": start date is required.`;
@@ -261,6 +318,52 @@ export default {
       }
       return null;
     },
+
+    buildRequest(pageOptions = {}) {
+      const req = {
+        list_view: this.listView,
+        item_types: [this.selectedType],
+        where: this.stripInternalProps(this.rootGroup),
+      };
+      if (this.sortField) {
+        req.sort = [{ field: this.sortField, direction: this.sortDirection }];
+      }
+      if (Object.keys(pageOptions).length) {
+        req.page = pageOptions;
+      }
+      return req;
+    },
+
+    schedulePreview() {
+      clearTimeout(this.previewTimer);
+      if (!this.rootGroup.children.length) {
+        this.previewCount = null;
+        return;
+      }
+      this.previewLoading = true;
+      this.previewTimer = setTimeout(() => this.fetchPreview(), 400);
+    },
+
+    async fetchPreview() {
+      if (!this.selectedType || !this.schema) return;
+      if (this.validateRules(this.rootGroup)) {
+        this.previewLoading = false;
+        this.previewCount = null;
+        return;
+      }
+      try {
+        const result = await runItemQuery(this.buildRequest({ limit: 200 }));
+        const count = result.items?.length ?? 0;
+        this.previewCount = result.page?.has_more
+          ? `${count}+ items`
+          : `${count} item${count !== 1 ? "s" : ""}`;
+      } catch {
+        this.previewCount = null;
+      } finally {
+        this.previewLoading = false;
+      }
+    },
+
     async submitQuery() {
       this.queryError = null;
       const validationError = this.validateRules(this.rootGroup);
@@ -270,14 +373,20 @@ export default {
       }
       this.queryLoading = true;
       try {
-        const request = {
-          list_view: this.listView,
-          item_types: [this.selectedType],
-          where: this.stripInternalProps(this.rootGroup),
-        };
-        const result = await runItemQuery(request);
+        const allItems = [];
+        let cursor = null;
+        const SAFETY_LIMIT = 2000;
+
+        do {
+          const pageOpts = { limit: 200 };
+          if (cursor) pageOpts.cursor = cursor;
+          const result = await runItemQuery(this.buildRequest(pageOpts));
+          allItems.push(...(result.items || []));
+          cursor = result.page?.has_more ? result.page.next_cursor : null;
+        } while (cursor && allItems.length < SAFETY_LIMIT);
+
         this.appliedSummary = this.buildSummary(this.rootGroup);
-        this.$emit("query-results", result.items || []);
+        this.$emit("query-results", allItems);
         this.isOpen = false;
       } catch (e) {
         if (e instanceof TypeError && e.message === "Failed to fetch") {
@@ -289,12 +398,13 @@ export default {
         this.queryLoading = false;
       }
     },
-    closeAndReset() {
-      this.isOpen = false;
-    },
-    resetQuery() {
+
+    clearFilters() {
       this.rootGroup = this.emptyGroup();
       this.appliedSummary = null;
+      this.sortField = "";
+      this.sortDirection = "desc";
+      this.previewCount = null;
       this.queryError = null;
       this.$emit("query-results", null);
     },
@@ -318,7 +428,7 @@ export default {
   font-size: 0.85rem;
   color: #495057;
   cursor: pointer;
-  max-width: 300px;
+  max-width: 320px;
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
@@ -347,6 +457,20 @@ export default {
   flex-shrink: 0;
   font-size: 0.65rem;
   opacity: 0.4;
+}
+.adv-trigger__clear {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: #6366f1;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 50%;
+}
+.adv-trigger__clear:hover {
+  opacity: 1;
+  background: rgba(99, 102, 241, 0.1);
 }
 
 .adv-overlay {
@@ -410,10 +534,24 @@ export default {
 .adv-modal__footer {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 10px;
   padding: 14px 24px;
   border-top: 1px solid #f0f0f0;
+}
+.adv-footer-error {
+  flex: 1;
+  font-size: 0.8rem;
+  color: #ef4444;
+}
+.adv-preview-count {
+  flex: 1;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+.adv-footer-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .adv-type-row {
@@ -424,8 +562,41 @@ export default {
   background: #f9fafb;
   border: 1px solid #e9ecef;
   border-radius: 8px;
-  margin-bottom: 4px;
 }
+.adv-sort-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #f9fafb;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+.adv-sort-select {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  color: #374151;
+  outline: none;
+  cursor: pointer;
+}
+.adv-sort-dir {
+  background: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: #6366f1;
+  cursor: pointer;
+  padding: 2px 10px;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.adv-sort-dir:hover {
+  background: #f5f3ff;
+}
+
 .adv-section-label {
   font-size: 0.72rem;
   font-weight: 600;

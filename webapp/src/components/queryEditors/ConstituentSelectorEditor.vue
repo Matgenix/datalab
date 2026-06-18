@@ -61,7 +61,7 @@ export default {
     selectOption(opt) {
       this.query = opt.label;
       this.showDropdown = false;
-      this.$emit("update:modelValue", opt.id);
+      this.$emit("update:modelValue", opt.value);
     },
     onBlur() {
       setTimeout(() => {
