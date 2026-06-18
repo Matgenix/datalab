@@ -146,8 +146,8 @@ export default {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 36px;
   gap: 10px;
-  align-items: center;
-  padding: 8px 10px;
+  align-items: start;
+  padding: 10px 10px;
   background: #fff;
   border: 1px solid #e9ecef;
   border-radius: 8px;
@@ -162,6 +162,7 @@ export default {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  padding-top: 2px;
 }
 .qr__field-icon {
   font-size: 0.8rem;
@@ -170,7 +171,10 @@ export default {
   width: 18px;
   text-align: center;
 }
-.qr__operator,
+.qr__operator {
+  min-width: 0;
+  padding-top: 2px;
+}
 .qr__value {
   min-width: 0;
 }

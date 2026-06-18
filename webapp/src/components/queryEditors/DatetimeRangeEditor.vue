@@ -5,7 +5,7 @@
       <input
         :value="modelValue && modelValue[0]"
         type="datetime-local"
-        class="form-control form-control-sm"
+        class="qeditor-input"
         @input="onStart($event.target.value)"
       />
     </div>
@@ -14,7 +14,7 @@
       <input
         :value="modelValue && modelValue[1]"
         type="datetime-local"
-        class="form-control form-control-sm"
+        class="qeditor-input"
         @input="onEnd($event.target.value)"
       />
     </div>
@@ -55,5 +55,18 @@ export default {
   color: #868e96;
   width: 28px;
   flex-shrink: 0;
+}
+.qeditor-input {
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 0.875rem;
+  color: #374151;
+  outline: none;
+  background: transparent;
+  width: 100%;
+}
+.qeditor-input:focus {
+  border-color: #6366f1;
 }
 </style>

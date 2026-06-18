@@ -29,7 +29,7 @@
 
               <div v-else class="adv-type-row">
                 <span class="adv-section-label">Item type</span>
-                <div class="d-flex gap-3">
+                <div class="d-flex" style="gap: 20px">
                   <div v-for="t in queryableTypes" :key="t.id" class="form-check mb-0">
                     <input
                       :id="`adv-qt-${t.id}`"
@@ -228,9 +228,47 @@ export default {
       }
       return null;
     },
+    validateRules(node) {
+      if (node.kind === "rule") {
+        if (!node.field) return "Select a field for all rules.";
+        if (!node.operator) return "Select an operator for all rules.";
+        const field = this.schema?.fields.find((f) => f.id === node.field);
+        const op = field?.operators.find((o) => o.id === node.operator);
+        if (op?.value_required) {
+          const v = node.value;
+          const isEmpty =
+            v === undefined ||
+            v === null ||
+            v === "" ||
+            (Array.isArray(v) && v.filter(Boolean).length === 0);
+          if (isEmpty) {
+            const label = field?.label || node.field;
+            return `"${label}": value is required.`;
+          }
+          if (op.editor === "datetime-range") {
+            const [from, to] = Array.isArray(v) ? v : ["", ""];
+            if (!from) return `"${field?.label || node.field}": start date is required.`;
+            if (!to) return `"${field?.label || node.field}": end date is required.`;
+          }
+        }
+        return null;
+      }
+      if (node.kind === "group") {
+        for (const child of node.children || []) {
+          const err = this.validateRules(child);
+          if (err) return err;
+        }
+      }
+      return null;
+    },
     async submitQuery() {
-      this.queryLoading = true;
       this.queryError = null;
+      const validationError = this.validateRules(this.rootGroup);
+      if (validationError) {
+        this.queryError = validationError;
+        return;
+      }
+      this.queryLoading = true;
       try {
         const request = {
           list_view: this.listView,
@@ -242,7 +280,11 @@ export default {
         this.$emit("query-results", result.items || []);
         this.isOpen = false;
       } catch (e) {
-        this.queryError = e.message;
+        if (e instanceof TypeError && e.message === "Failed to fetch") {
+          this.queryError = "Cannot reach the server. Check your connection.";
+        } else {
+          this.queryError = e.message || "Query failed. Please try again.";
+        }
       } finally {
         this.queryLoading = false;
       }
