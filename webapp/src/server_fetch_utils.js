@@ -643,8 +643,11 @@ export async function requestMagicLink(email_address) {
     });
 }
 
-export async function loginLocal(username, password) {
-  await fetch_post(`${API_URL}/login/local`, { username, password });
+export async function loginTestingUsernamePassword(username, password) {
+  await fetch_post(`${API_URL}/login/testing-username-password`, {
+    username,
+    password,
+  });
   invalidateCurrentUserCache();
   return getCurrentUser();
 }

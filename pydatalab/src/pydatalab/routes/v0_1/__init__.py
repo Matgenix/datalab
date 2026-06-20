@@ -2,7 +2,7 @@ from flask import Blueprint
 
 from ._version import __api_version__
 from .admin import ADMIN
-from .auth import AUTH, OAUTH, OAUTH_PROXIES
+from .auth import AUTH, OAUTH, OAUTH_PROXIES, get_login_blueprints
 from .blocks import BLOCKS
 from .collections import COLLECTIONS
 from .export import EXPORT
@@ -31,4 +31,10 @@ BLUEPRINTS: tuple[Blueprint, ...] = (
     EXPORT,
 )
 
-__all__ = ("BLUEPRINTS", "OAUTH", "__api_version__", "OAUTH_PROXIES")
+__all__ = (
+    "BLUEPRINTS",
+    "OAUTH",
+    "__api_version__",
+    "OAUTH_PROXIES",
+    "get_login_blueprints",
+)

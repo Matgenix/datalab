@@ -166,16 +166,17 @@ dev.add_task(serve)
 
 
 @task(
+    aliases=["create-test-user"],
     help={
-        "username": "Local testing username",
-        "password": "Local testing password",
+        "username": "Testing username/password username",
+        "password": "Testing username/password password",
         "display_name": "Display name for a newly-created or updated user",
         "contact_email": "Optional contact email for the user",
         "role": "User role: user, manager, or admin",
         "account_status": "Account status: active, unverified, or deactivated",
-    }
+    },
 )
-def create_local_user(
+def create_testing_username_password_user(
     _,
     username: str,
     password: str,
@@ -184,19 +185,22 @@ def create_local_user(
     role: str = "user",
     account_status: str = "active",
 ):
-    """Create or update a testing-only local username/password user."""
+    """Create or update a testing-only username/password user."""
     from bson import ObjectId
     from pydantic import ValidationError
 
     from pydatalab.config import CONFIG
-    from pydatalab.local_auth import load_local_credentials, set_local_credential
     from pydatalab.models.people import AccountStatus, Person
     from pydatalab.models.utils import HumanReadableIdentifier, UserRole
     from pydatalab.mongo import get_database
+    from pydatalab.testing_username_password_auth import (
+        load_testing_username_password_credentials,
+        set_testing_username_password_credential,
+    )
 
     if not CONFIG.TESTING:
         raise SystemExit(
-            "Local username/password users are only available when CONFIG.TESTING is true. "
+            "Testing username/password users are only available when CONFIG.TESTING is true. "
             "Set PYDATALAB_TESTING=1 before running this task."
         )
 
@@ -218,7 +222,7 @@ def create_local_user(
         )
 
     db = get_database()
-    credentials = load_local_credentials()
+    credentials = load_testing_username_password_credentials()
     existing_credential = credentials.get(username)
     user_id = ObjectId(existing_credential["user_id"]) if existing_credential else ObjectId()
     existing_user = db.users.find_one({"_id": user_id})
@@ -231,16 +235,18 @@ def create_local_user(
 
     if existing_user is None:
         user = Person(immutable_id=user_id, **user_update)
-        db.users.insert_one(user.dict(by_alias=True, exclude_none=True))
+        user_document = user.dict(by_alias=True, exclude_none=True)
+        user_document.pop("identities", None)
+        db.users.insert_one(user_document)
     else:
         db.users.update_one({"_id": user_id}, {"$set": user_update})
 
     db.roles.update_one({"_id": user_id}, {"$set": {"role": role_value.value}}, upsert=True)
-    set_local_credential(username, str(user_id), password)
-    print(f"Local testing user {username!r} is linked to {user_id}.")
+    set_testing_username_password_credential(username, str(user_id), password)
+    print(f"Testing username/password user {username!r} is linked to {user_id}.")
 
 
-dev.add_task(create_local_user)
+dev.add_task(create_testing_username_password_user)
 
 
 # Example data for `dev.seed`, grouped by the block that renders it. Each group

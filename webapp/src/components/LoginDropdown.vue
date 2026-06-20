@@ -45,12 +45,12 @@
     <font-awesome-icon :icon="['fa', 'envelope']" /> Login via email
   </button>
   <button
-    v-if="showLocal"
+    v-if="showTestingUsernamePassword"
     type="button"
     class="dropdown-item btn login btn-link"
     aria-label="Login with username and password for testing only"
     style="background-color: #ff000062; white-space: normal"
-    @click="localLoginModalIsOpen = true"
+    @click="testingUsernamePasswordLoginModalIsOpen = true"
   >
     Username/password
     <font-awesome-icon icon="exclamation-triangle" style="color: #b00020" />
@@ -58,10 +58,14 @@
       >for testing only</span
     >
   </button>
-  <form v-if="showLocal" class="modal-enclosure" @submit.prevent="submitLocalLogin">
+  <form
+    v-if="showTestingUsernamePassword"
+    class="modal-enclosure"
+    @submit.prevent="submitTestingUsernamePasswordLogin"
+  >
     <Modal
-      v-model="localLoginModalIsOpen"
-      :disable-submit="localLoginLoading || !localUsername || !localPassword"
+      v-model="testingUsernamePasswordLoginModalIsOpen"
+      :disable-submit="testingUsernamePasswordLoginLoading || !testingUsername || !testingPassword"
       :is-large="false"
     >
       <template #header>
@@ -74,20 +78,24 @@
           This username/password login is for testing only.
         </div>
         <div class="form-group">
-          <label for="local-login-username" class="col-form-label">Username</label>
+          <label for="testing-username-password-login-username" class="col-form-label"
+            >Username</label
+          >
           <input
-            id="local-login-username"
-            v-model="localUsername"
+            id="testing-username-password-login-username"
+            v-model="testingUsername"
             class="form-control"
             autocomplete="username"
             type="text"
           />
         </div>
         <div class="form-group">
-          <label for="local-login-password" class="col-form-label">Password</label>
+          <label for="testing-username-password-login-password" class="col-form-label"
+            >Password</label
+          >
           <input
-            id="local-login-password"
-            v-model="localPassword"
+            id="testing-username-password-login-password"
+            v-model="testingPassword"
             class="form-control"
             autocomplete="current-password"
             type="password"
@@ -96,19 +104,23 @@
         <div style="color: #b00020; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem">
           Testing-only mechanism. Do not use this login path for production accounts.
         </div>
-        <div v-if="localLoginError" style="color: #b00020; font-size: 0.8rem">
-          {{ localLoginError }}
+        <div v-if="testingUsernamePasswordLoginError" style="color: #b00020; font-size: 0.8rem">
+          {{ testingUsernamePasswordLoginError }}
         </div>
       </template>
       <template #footer>
         <button
           type="submit"
           class="btn btn-info"
-          :disabled="localLoginLoading || !localUsername || !localPassword"
+          :disabled="testingUsernamePasswordLoginLoading || !testingUsername || !testingPassword"
         >
           Login
         </button>
-        <button type="button" class="btn btn-secondary" @click="localLoginModalIsOpen = false">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          @click="testingUsernamePasswordLoginModalIsOpen = false"
+        >
           Close
         </button>
       </template>
@@ -120,7 +132,7 @@
 import GetEmailModal from "@/components/GetEmailModal.vue";
 import Modal from "@/components/Modal.vue";
 import { API_URL } from "@/resources.js";
-import { loginLocal } from "@/server_fetch_utils.js";
+import { loginTestingUsernamePassword } from "@/server_fetch_utils.js";
 
 export default {
   components: {
@@ -135,11 +147,11 @@ export default {
     return {
       emailModalIsOpen: false,
       apiUrl: API_URL,
-      localLoginModalIsOpen: false,
-      localUsername: "",
-      localPassword: "",
-      localLoginError: "",
-      localLoginLoading: false,
+      testingUsernamePasswordLoginModalIsOpen: false,
+      testingUsername: "",
+      testingPassword: "",
+      testingUsernamePasswordLoginError: "",
+      testingUsernamePasswordLoginLoading: false,
     };
   },
   computed: {
@@ -161,23 +173,25 @@ export default {
     showEmail() {
       return this.$store.state.serverInfo?.features?.auth_mechanisms?.email ?? false;
     },
-    showLocal() {
-      return this.$store.state.serverInfo?.features?.auth_mechanisms?.testing_local ?? false;
+    showTestingUsernamePassword() {
+      return (
+        this.$store.state.serverInfo?.features?.auth_mechanisms?.testing_username_password ?? false
+      );
     },
   },
   methods: {
-    async submitLocalLogin() {
-      this.localLoginLoading = true;
-      this.localLoginError = "";
+    async submitTestingUsernamePasswordLogin() {
+      this.testingUsernamePasswordLoginLoading = true;
+      this.testingUsernamePasswordLoginError = "";
       try {
-        const user = await loginLocal(this.localUsername, this.localPassword);
-        this.localPassword = "";
-        this.localLoginModalIsOpen = false;
+        const user = await loginTestingUsernamePassword(this.testingUsername, this.testingPassword);
+        this.testingPassword = "";
+        this.testingUsernamePasswordLoginModalIsOpen = false;
         this.$emit("current-user-changed", user);
       } catch {
-        this.localLoginError = "Login failed.";
+        this.testingUsernamePasswordLoginError = "Login failed.";
       } finally {
-        this.localLoginLoading = false;
+        this.testingUsernamePasswordLoginLoading = false;
       }
     },
   },

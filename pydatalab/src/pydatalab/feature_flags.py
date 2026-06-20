@@ -17,7 +17,7 @@ class AuthMechanisms(BaseModel):
     google: bool = False
     microsoft: bool = False
     # Testing-only username/password login, never intended as a production auth mechanism.
-    testing_local: bool = False
+    testing_username_password: bool = False
 
 
 class AIIntegrations(BaseModel):
@@ -60,7 +60,7 @@ def check_feature_flags(app):
     object reported by the API for use in UIs.
 
     """
-    FEATURE_FLAGS.auth_mechanisms.testing_local = bool(CONFIG.TESTING)
+    FEATURE_FLAGS.auth_mechanisms.testing_username_password = bool(CONFIG.TESTING)
 
     if CONFIG.EMAIL_AUTH_SMTP_SETTINGS is None:
         LOGGER.warning(

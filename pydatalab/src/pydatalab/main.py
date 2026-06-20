@@ -220,7 +220,7 @@ def create_app(
 def register_endpoints(app: Flask):
     """Loops through the implemented endpoints, blueprints and error handlers adds them to the app."""
     from pydatalab.errors import ERROR_HANDLERS
-    from pydatalab.routes import BLUEPRINTS, OAUTH, __api_version__
+    from pydatalab.routes import BLUEPRINTS, __api_version__, get_login_blueprints
 
     major, minor, patch = __api_version__.split(".")
     versions = ["", f"v{major}", f"v{major}.{minor}", f"v{major}.{minor}.{patch}"]
@@ -231,8 +231,8 @@ def register_endpoints(app: Flask):
                 bp, url_prefix=f"{CONFIG.ROOT_PATH}{ver}", name=f"{ver}/{bp.name}"
             )
 
-    for bp in OAUTH:  # type: ignore
-        app.register_blueprint(OAUTH[bp], url_prefix=f"{CONFIG.ROOT_PATH}login")  # type: ignore
+    for bp in get_login_blueprints():
+        app.register_blueprint(bp, url_prefix=f"{CONFIG.ROOT_PATH}login")
 
     for exception_type, handler in ERROR_HANDLERS:
         app.register_error_handler(exception_type, handler)
