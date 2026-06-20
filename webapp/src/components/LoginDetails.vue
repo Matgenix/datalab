@@ -59,7 +59,7 @@
         style="display: block"
         aria-labelledby="loginButton"
       >
-        <LoginDropdown @login-success="handleLoginSuccess" />
+        <LoginDropdown @current-user-changed="handleCurrentUserChanged" />
       </div>
     </div>
   </template>
@@ -132,7 +132,7 @@ export default {
         );
       }
     },
-    handleLoginSuccess(user) {
+    handleCurrentUserChanged(user) {
       this.user = user;
       this.isUserLoaded = true;
       this.isLoginDropdownVisible = false;
