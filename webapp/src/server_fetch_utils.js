@@ -643,6 +643,12 @@ export async function requestMagicLink(email_address) {
     });
 }
 
+export async function loginLocal(username, password) {
+  await fetch_post(`${API_URL}/login/local`, { username, password });
+  invalidateCurrentUserCache();
+  return getCurrentUser();
+}
+
 export function searchUsers(query, nresults = 100) {
   // construct a url with parameters:
   var url = new URL(`${API_URL}/search-users/`);

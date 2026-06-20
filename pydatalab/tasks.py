@@ -165,6 +165,7 @@ def serve(_, host: str = "127.0.0.1", port: int = 5001, reload: bool = True, tes
 dev.add_task(serve)
 
 
+<<<<<<< HEAD
 @task(
     help={
         "username": "Local testing username",
@@ -572,6 +573,84 @@ def seed(_):
 
 
 dev.add_task(seed)
+=======
+@task(
+    help={
+        "username": "Local testing username",
+        "password": "Local testing password",
+        "display_name": "Display name for a newly-created or updated user",
+        "contact_email": "Optional contact email for the user",
+        "role": "User role: user, manager, or admin",
+        "account_status": "Account status: active, unverified, or deactivated",
+    }
+)
+def create_local_user(
+    _,
+    username: str,
+    password: str,
+    display_name: str | None = None,
+    contact_email: str | None = None,
+    role: str = "user",
+    account_status: str = "active",
+):
+    """Create or update a testing-only local username/password user."""
+    from bson import ObjectId
+    from pydantic import ValidationError
+
+    from pydatalab.config import CONFIG
+    from pydatalab.local_auth import load_local_credentials, set_local_credential
+    from pydatalab.models.people import AccountStatus, Person
+    from pydatalab.models.utils import HumanReadableIdentifier, UserRole
+    from pydatalab.mongo import get_database
+
+    if not CONFIG.TESTING:
+        raise SystemExit(
+            "Local username/password users are only available when CONFIG.TESTING is true. "
+            "Set PYDATALAB_TESTING=1 before running this task."
+        )
+
+    try:
+        username = str(HumanReadableIdentifier(username))
+    except ValidationError as exc:
+        raise SystemExit(f"Invalid username {username!r}: {exc}") from None
+    try:
+        role_value = UserRole(role)
+    except ValueError:
+        raise SystemExit(f"Invalid role {role!r}. Must be one of {[r.value for r in UserRole]}.")
+
+    try:
+        status_value = AccountStatus(account_status)
+    except ValueError:
+        raise SystemExit(
+            f"Invalid account status {account_status!r}. "
+            f"Must be one of {[s.value for s in AccountStatus]}."
+        )
+
+    db = get_database()
+    credentials = load_local_credentials()
+    existing_credential = credentials.get(username)
+    user_id = ObjectId(existing_credential["user_id"]) if existing_credential else ObjectId()
+    existing_user = db.users.find_one({"_id": user_id})
+
+    user_update = {"account_status": status_value.value}
+    if display_name is not None or existing_user is None:
+        user_update["display_name"] = display_name or username
+    if contact_email is not None:
+        user_update["contact_email"] = contact_email
+
+    if existing_user is None:
+        user = Person(immutable_id=user_id, **user_update)
+        db.users.insert_one(user.dict(by_alias=True, exclude_none=True))
+    else:
+        db.users.update_one({"_id": user_id}, {"$set": user_update})
+
+    db.roles.update_one({"_id": user_id}, {"$set": {"role": role_value.value}}, upsert=True)
+    set_local_credential(username, str(user_id), password)
+    print(f"Local testing user {username!r} is linked to {user_id}.")
+
+
+dev.add_task(create_local_user)
+>>>>>>> abd587d (Local username/password credentials for testing purposes.)
 
 
 @task

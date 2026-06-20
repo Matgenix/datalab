@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+from bson import ObjectId
+
 from pydatalab.routes.v0_1.auth import _check_email_domain
 
 
@@ -60,6 +62,114 @@ def test_magic_links_expected_failures(unauthenticated_client, app):
         )
         assert response.status_code == 403
         assert len(outbox) == 0
+
+
+def test_local_login_disabled_outside_testing(unauthenticated_client):
+    response = unauthenticated_client.post(
+        "/login/local", json={"username": "test-user", "password": "password"}
+    )
+    assert response.status_code == 403
+
+
+def test_local_login_success(unauthenticated_client, monkeypatch, user_id):
+    from pydatalab.config import CONFIG
+    from pydatalab.local_auth import set_local_credential
+
+    monkeypatch.setattr(CONFIG, "TESTING", True)
+    set_local_credential("local-user", str(user_id), "password")
+
+    response = unauthenticated_client.post(
+        "/login/local", json={"username": "local-user", "password": "password"}
+    )
+    assert response.status_code == 200
+    assert response.json["status"] == "success"
+
+    current_user = unauthenticated_client.get("/get-current-user/")
+    assert current_user.status_code == 200
+    assert current_user.json["immutable_id"] == str(user_id)
+
+
+def test_local_login_bad_credentials(unauthenticated_client, monkeypatch, user_id):
+    from pydatalab.config import CONFIG
+    from pydatalab.local_auth import set_local_credential
+
+    monkeypatch.setattr(CONFIG, "TESTING", True)
+    set_local_credential("wrong-password-user", str(user_id), "password")
+
+    response = unauthenticated_client.post(
+        "/login/local", json={"username": "wrong-password-user", "password": "bad"}
+    )
+    assert response.status_code == 401
+
+    response = unauthenticated_client.post(
+        "/login/local", json={"username": "unknown-user", "password": "password"}
+    )
+    assert response.status_code == 401
+
+
+def test_local_login_missing_linked_user(unauthenticated_client, monkeypatch):
+    from pydatalab.config import CONFIG
+    from pydatalab.local_auth import set_local_credential
+
+    monkeypatch.setattr(CONFIG, "TESTING", True)
+    set_local_credential("missing-user", str(ObjectId()), "password")
+
+    response = unauthenticated_client.post(
+        "/login/local", json={"username": "missing-user", "password": "password"}
+    )
+    assert response.status_code == 401
+
+
+def test_local_login_deactivated_user(unauthenticated_client, monkeypatch, deactivated_user_id):
+    from pydatalab.config import CONFIG
+    from pydatalab.local_auth import set_local_credential
+
+    monkeypatch.setattr(CONFIG, "TESTING", True)
+    set_local_credential("deactivated-local-user", str(deactivated_user_id), "password")
+
+    response = unauthenticated_client.post(
+        "/login/local", json={"username": "deactivated-local-user", "password": "password"}
+    )
+    assert response.status_code == 401
+
+
+def test_create_local_user_task(database, unauthenticated_client, monkeypatch):
+    import importlib.util
+    from pathlib import Path
+
+    from pydatalab.config import CONFIG
+    from pydatalab.local_auth import load_local_credentials
+
+    tasks_path = Path(__file__).parents[2] / "tasks.py"
+    spec = importlib.util.spec_from_file_location("pydatalab_tasks", tasks_path)
+    tasks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tasks)
+
+    monkeypatch.setattr(CONFIG, "TESTING", True)
+
+    tasks.create_local_user.body(
+        None,
+        username="task-local-user",
+        password="password",  # noqa: S106 - this feature is for dev testing only
+        display_name="Task Local User",
+        contact_email="task-local-user@example.org",
+        role="admin",
+        account_status="active",
+    )
+
+    credentials = load_local_credentials()
+    assert "task-local-user" in credentials
+
+    user_id = ObjectId(credentials["task-local-user"]["user_id"])
+    user = database.users.find_one({"_id": user_id})
+    assert user["display_name"] == "Task Local User"
+    assert user["contact_email"] == "task-local-user@example.org"
+    assert database.roles.find_one({"_id": user_id})["role"] == "admin"
+
+    response = unauthenticated_client.post(
+        "/login/local", json={"username": "task-local-user", "password": "password"}
+    )
+    assert response.status_code == 200
 
 
 # ──────────────────────────────────────────────

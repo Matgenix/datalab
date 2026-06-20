@@ -18,11 +18,12 @@ from flask import Blueprint, g, jsonify, redirect, request
 from flask_dance.consumer import OAuth2ConsumerBlueprint, oauth_authorized
 from flask_login import current_user, login_user
 from flask_login.utils import LocalProxy
-from werkzeug.exceptions import BadRequest, Forbidden
+from werkzeug.exceptions import BadRequest, Forbidden, Unauthorized
 
 from pydatalab.config import CONFIG
 from pydatalab.errors import UserRegistrationForbidden
 from pydatalab.feature_flags import FEATURE_FLAGS
+from pydatalab.local_auth import verify_local_credential
 from pydatalab.logger import LOGGER
 from pydatalab.login import get_by_id
 from pydatalab.models.people import AccountStatus, Identity, IdentityType, Person
@@ -795,6 +796,34 @@ def generate_and_share_magic_link():
     _send_magic_link_email(email, token, referrer)
 
     return jsonify({"status": "success", "message": "Email sent successfully."}), 200
+
+
+@EMAIL_BLUEPRINT.route("/local", methods=["POST"])
+def local_login():
+    """Testing-only username/password login."""
+    if not CONFIG.TESTING:
+        raise Forbidden("Local login is only available in testing mode.")
+
+    request_json = request.get_json() or {}
+    username = request_json.get("username")
+    password = request_json.get("password")
+    if not username or not password:
+        raise Unauthorized("Invalid username or password.")
+
+    user_id = verify_local_credential(username, password)
+    if not user_id:
+        raise Unauthorized("Invalid username or password.")
+
+    try:
+        user_model = get_by_id(str(user_id))
+    except (StopIteration, ValueError):
+        user_model = None
+
+    if user_model is None or user_model.account_status == AccountStatus.DEACTIVATED:
+        raise Unauthorized("Invalid username or password.")
+
+    wrapped_login_user(user_model)
+    return jsonify({"status": "success"}), 200
 
 
 @EMAIL_BLUEPRINT.route("/email")
