@@ -13,13 +13,15 @@ def testing_username_password_client(app_config, real_mongo_client):
     from pydatalab.main import create_app
 
     old_testing = CONFIG.TESTING
+    old_enable_test_users = CONFIG.ENABLE_TEST_USERS
     old_testing_username_password = FEATURE_FLAGS.auth_mechanisms.testing_username_password
-    app = create_app({**app_config, "TESTING": True}, env_file=False)
+    app = create_app({**app_config, "TESTING": False, "ENABLE_TEST_USERS": True}, env_file=False)
     try:
         with app.test_client() as client:
             yield client
     finally:
         CONFIG.TESTING = old_testing
+        CONFIG.ENABLE_TEST_USERS = old_enable_test_users
         FEATURE_FLAGS.auth_mechanisms.testing_username_password = old_testing_username_password
 
 
@@ -88,6 +90,12 @@ def test_testing_username_password_login_disabled_outside_testing(unauthenticate
         json={"username": "test-user", "password": "password"},
     )
     assert response.status_code == 404
+
+
+def test_testing_username_password_feature_flag(testing_username_password_client):
+    response = testing_username_password_client.get("/info")
+    assert response.status_code == 200
+    assert response.json["features"]["auth_mechanisms"]["testing_username_password"] is True
 
 
 def test_testing_username_password_login_success(testing_username_password_client, user_id):
@@ -177,7 +185,7 @@ def test_create_testing_username_password_user_task(
     tasks = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tasks)
 
-    monkeypatch.setattr(CONFIG, "TESTING", True)
+    monkeypatch.setattr(CONFIG, "ENABLE_TEST_USERS", True)
 
     tasks.create_testing_username_password_user.body(
         None,

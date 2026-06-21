@@ -198,10 +198,10 @@ def create_testing_username_password_user(
         set_testing_username_password_credential,
     )
 
-    if not CONFIG.TESTING:
+    if not CONFIG.ENABLE_TEST_USERS:
         raise SystemExit(
-            "Testing username/password users are only available when CONFIG.TESTING is true. "
-            "Set PYDATALAB_TESTING=1 before running this task."
+            "Testing username/password users are only available when CONFIG.ENABLE_TEST_USERS "
+            "is true. Set PYDATALAB_ENABLE_TEST_USERS=1 before running this task."
         )
 
     try:

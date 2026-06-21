@@ -10,6 +10,7 @@ def test_default_settings():
     assert config.MONGO_URI == "mongodb://localhost:27017/datalabvue"
     assert config.SECRET_KEY
     assert Path(config.FILE_DIRECTORY).name == "files"
+    assert config.ENABLE_TEST_USERS is False
 
 
 def test_update_settings():

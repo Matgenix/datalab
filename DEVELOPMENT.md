@@ -33,8 +33,8 @@ The web app needs a logged-in session. For a realistic login flow, set up GitHub
 4. **Login via GitHub** in the web app.
 
 For local development and testing, you can instead create a testing-only
-username/password user. This only works when `PYDATALAB_TESTING=true`; the route and
-feature flag are disabled otherwise.
+username/password user. This only works when `PYDATALAB_ENABLE_TEST_USERS=true`; it
+does not require `PYDATALAB_TESTING=true`, so normal item permissions can stay active.
 
 ```bash
 docker compose exec api-dev /opt/.venv/bin/invoke dev.create-test-user \

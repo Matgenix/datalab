@@ -60,7 +60,7 @@ def check_feature_flags(app):
     object reported by the API for use in UIs.
 
     """
-    FEATURE_FLAGS.auth_mechanisms.testing_username_password = bool(CONFIG.TESTING)
+    FEATURE_FLAGS.auth_mechanisms.testing_username_password = bool(CONFIG.ENABLE_TEST_USERS)
 
     if CONFIG.EMAIL_AUTH_SMTP_SETTINGS is None:
         LOGGER.warning(

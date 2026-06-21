@@ -433,7 +433,7 @@ OAUTH: dict[IdentityType, Blueprint] = {
 def get_login_blueprints() -> tuple[Blueprint, ...]:
     """Return blueprints registered under /login."""
     login_blueprints = tuple(OAUTH.values())
-    if CONFIG.TESTING:
+    if CONFIG.ENABLE_TEST_USERS:
         login_blueprints += (TESTING_USERNAME_PASSWORD_BLUEPRINT,)
     return login_blueprints
 
@@ -877,8 +877,8 @@ def email_logged_in():
 @TESTING_USERNAME_PASSWORD_BLUEPRINT.route("/testing-username-password", methods=["POST"])
 def testing_username_password_login():
     """Testing-only username/password login."""
-    if not CONFIG.TESTING:
-        raise Forbidden("Username/password login is only available in testing mode.")
+    if not CONFIG.ENABLE_TEST_USERS:
+        raise Forbidden("Username/password login is only available when test users are enabled.")
 
     request_json = request.get_json() or {}
     username = request_json.get("username")
