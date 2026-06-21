@@ -21,7 +21,7 @@ service: `docker compose --profile dev restart api-dev` (or `app-dev`).
 
 ## Logging in
 
-The web app needs a logged-in session. Set up GitHub OAuth once:
+The web app needs a logged-in session. For a realistic login flow, set up GitHub OAuth once:
 
 1. Create an OAuth App at https://github.com/settings/developers
    - Homepage URL: `http://localhost:8081`
@@ -31,6 +31,20 @@ The web app needs a logged-in session. Set up GitHub OAuth once:
 3. Set `PYDATALAB_SECRET_KEY` to a real value (generate one with
    `python3 -c 'import secrets; print(secrets.token_hex(64))'`).
 4. **Login via GitHub** in the web app.
+
+For local development and testing, you can instead create a testing-only
+username/password user. This only works when `PYDATALAB_ENABLE_TEST_USERS=true`; it
+does not require `PYDATALAB_TESTING=true`, so normal item permissions can stay active.
+
+```bash
+docker compose exec api-dev /opt/.venv/bin/invoke dev.create-test-user \
+  --username alice \
+  --password alice \
+  --display-name "Alice"
+```
+
+Then open the web app, click **Login/Register**, and use the testing
+username/password login.
 
 
 ## Handy commands

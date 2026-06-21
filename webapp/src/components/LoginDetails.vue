@@ -59,7 +59,7 @@
         style="display: block"
         aria-labelledby="loginButton"
       >
-        <LoginDropdown />
+        <LoginDropdown @current-user-changed="handleCurrentUserChanged" />
       </div>
     </div>
   </template>
@@ -131,6 +131,12 @@ export default {
           this.user.account_status == "unverified" ? true : false,
         );
       }
+    },
+    handleCurrentUserChanged(user) {
+      this.user = user;
+      this.isUserLoaded = true;
+      this.isLoginDropdownVisible = false;
+      this.isUserDropdownVisible = false;
     },
   },
 };

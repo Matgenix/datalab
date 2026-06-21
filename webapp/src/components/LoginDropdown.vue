@@ -44,23 +44,114 @@
   >
     <font-awesome-icon :icon="['fa', 'envelope']" /> Login via email
   </button>
+  <button
+    v-if="showTestingUsernamePassword"
+    type="button"
+    class="dropdown-item btn login btn-link"
+    aria-label="Login with username and password for testing only"
+    style="background-color: #ff000062; white-space: normal"
+    @click="testingUsernamePasswordLoginModalIsOpen = true"
+  >
+    Username/password
+    <font-awesome-icon icon="exclamation-triangle" style="color: #b00020" />
+    <span style="color: #b00020; font-size: 0.8rem; font-weight: 600; margin-left: 0.25rem"
+      >for testing only</span
+    >
+  </button>
+  <form
+    v-if="showTestingUsernamePassword"
+    class="modal-enclosure"
+    @submit.prevent="submitTestingUsernamePasswordLogin"
+  >
+    <Modal
+      v-model="testingUsernamePasswordLoginModalIsOpen"
+      :disable-submit="testingUsernamePasswordLoginLoading || !testingUsername || !testingPassword"
+      :is-large="false"
+    >
+      <template #header>
+        <font-awesome-icon icon="exclamation-triangle" style="color: #b00020" />
+        Username/password login
+      </template>
+      <template #body>
+        <div class="alert alert-warning" style="border-color: #b00020">
+          <font-awesome-icon icon="exclamation-triangle" style="color: #b00020" />
+          This username/password login is for testing only.
+        </div>
+        <div class="form-group">
+          <label for="testing-username-password-login-username" class="col-form-label"
+            >Username</label
+          >
+          <input
+            id="testing-username-password-login-username"
+            v-model="testingUsername"
+            class="form-control"
+            autocomplete="username"
+            type="text"
+          />
+        </div>
+        <div class="form-group">
+          <label for="testing-username-password-login-password" class="col-form-label"
+            >Password</label
+          >
+          <input
+            id="testing-username-password-login-password"
+            v-model="testingPassword"
+            class="form-control"
+            autocomplete="current-password"
+            type="password"
+          />
+        </div>
+        <div style="color: #b00020; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem">
+          Testing-only mechanism. Do not use this login path for production accounts.
+        </div>
+        <div v-if="testingUsernamePasswordLoginError" style="color: #b00020; font-size: 0.8rem">
+          {{ testingUsernamePasswordLoginError }}
+        </div>
+      </template>
+      <template #footer>
+        <button
+          type="submit"
+          class="btn btn-info"
+          :disabled="testingUsernamePasswordLoginLoading || !testingUsername || !testingPassword"
+        >
+          Login
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          @click="testingUsernamePasswordLoginModalIsOpen = false"
+        >
+          Close
+        </button>
+      </template>
+    </Modal>
+  </form>
 </template>
 
 <script>
 import GetEmailModal from "@/components/GetEmailModal.vue";
+import Modal from "@/components/Modal.vue";
 import { API_URL } from "@/resources.js";
+import { loginTestingUsernamePassword } from "@/server_fetch_utils.js";
 
 export default {
   components: {
     GetEmailModal,
+    Modal,
   },
   props: {
     modelValue: Boolean,
   },
+  emits: ["current-user-changed"],
   data() {
     return {
       emailModalIsOpen: false,
       apiUrl: API_URL,
+      testingUsernamePasswordLoginModalIsOpen: false,
+      testingUsername: "",
+      testingPassword: "",
+      testingUsernamePasswordLoginError: "",
+      testingUsernamePasswordLoginLoading: false,
     };
   },
   computed: {
@@ -81,6 +172,27 @@ export default {
     },
     showEmail() {
       return this.$store.state.serverInfo?.features?.auth_mechanisms?.email ?? false;
+    },
+    showTestingUsernamePassword() {
+      return (
+        this.$store.state.serverInfo?.features?.auth_mechanisms?.testing_username_password ?? false
+      );
+    },
+  },
+  methods: {
+    async submitTestingUsernamePasswordLogin() {
+      this.testingUsernamePasswordLoginLoading = true;
+      this.testingUsernamePasswordLoginError = "";
+      try {
+        const user = await loginTestingUsernamePassword(this.testingUsername, this.testingPassword);
+        this.testingPassword = "";
+        this.testingUsernamePasswordLoginModalIsOpen = false;
+        this.$emit("current-user-changed", user);
+      } catch {
+        this.testingUsernamePasswordLoginError = "Login failed.";
+      } finally {
+        this.testingUsernamePasswordLoginLoading = false;
+      }
     },
   },
 };

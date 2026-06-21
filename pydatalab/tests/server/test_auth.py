@@ -1,6 +1,28 @@
 from unittest.mock import MagicMock
 
+import pytest
+from bson import ObjectId
+
 from pydatalab.routes.v0_1.auth import _check_email_domain
+
+
+@pytest.fixture()
+def testing_username_password_client(app_config, real_mongo_client):
+    from pydatalab.config import CONFIG
+    from pydatalab.feature_flags import FEATURE_FLAGS
+    from pydatalab.main import create_app
+
+    old_testing = CONFIG.TESTING
+    old_enable_test_users = CONFIG.ENABLE_TEST_USERS
+    old_testing_username_password = FEATURE_FLAGS.auth_mechanisms.testing_username_password
+    app = create_app({**app_config, "TESTING": False, "ENABLE_TEST_USERS": True}, env_file=False)
+    try:
+        with app.test_client() as client:
+            yield client
+    finally:
+        CONFIG.TESTING = old_testing
+        CONFIG.ENABLE_TEST_USERS = old_enable_test_users
+        FEATURE_FLAGS.auth_mechanisms.testing_username_password = old_testing_username_password
 
 
 def test_allow_emails():
@@ -60,6 +82,136 @@ def test_magic_links_expected_failures(unauthenticated_client, app):
         )
         assert response.status_code == 403
         assert len(outbox) == 0
+
+
+def test_testing_username_password_login_disabled_outside_testing(unauthenticated_client):
+    response = unauthenticated_client.post(
+        "/login/testing-username-password",
+        json={"username": "test-user", "password": "password"},
+    )
+    assert response.status_code == 404
+
+
+def test_testing_username_password_feature_flag(testing_username_password_client):
+    response = testing_username_password_client.get("/info")
+    assert response.status_code == 200
+    assert response.json["features"]["auth_mechanisms"]["testing_username_password"] is True
+
+
+def test_testing_username_password_login_success(testing_username_password_client, user_id):
+    from pydatalab.testing_username_password_auth import (
+        set_testing_username_password_credential,
+    )
+
+    set_testing_username_password_credential("testing-user", str(user_id), "password")
+
+    response = testing_username_password_client.post(
+        "/login/testing-username-password",
+        json={"username": "testing-user", "password": "password"},
+    )
+    assert response.status_code == 200
+    assert response.json["status"] == "success"
+
+    current_user = testing_username_password_client.get("/get-current-user/")
+    assert current_user.status_code == 200
+    assert current_user.json["immutable_id"] == str(user_id)
+
+
+def test_testing_username_password_login_bad_credentials(testing_username_password_client, user_id):
+    from pydatalab.testing_username_password_auth import (
+        set_testing_username_password_credential,
+    )
+
+    set_testing_username_password_credential("wrong-password-user", str(user_id), "password")
+
+    response = testing_username_password_client.post(
+        "/login/testing-username-password",
+        json={"username": "wrong-password-user", "password": "bad"},
+    )
+    assert response.status_code == 401
+
+    response = testing_username_password_client.post(
+        "/login/testing-username-password",
+        json={"username": "unknown-user", "password": "password"},
+    )
+    assert response.status_code == 401
+
+
+def test_testing_username_password_login_missing_linked_user(testing_username_password_client):
+    from pydatalab.testing_username_password_auth import (
+        set_testing_username_password_credential,
+    )
+
+    set_testing_username_password_credential("missing-user", str(ObjectId()), "password")
+
+    response = testing_username_password_client.post(
+        "/login/testing-username-password",
+        json={"username": "missing-user", "password": "password"},
+    )
+    assert response.status_code == 401
+
+
+def test_testing_username_password_login_deactivated_user(
+    testing_username_password_client, deactivated_user_id
+):
+    from pydatalab.testing_username_password_auth import (
+        set_testing_username_password_credential,
+    )
+
+    set_testing_username_password_credential(
+        "deactivated-testing-user", str(deactivated_user_id), "password"
+    )
+
+    response = testing_username_password_client.post(
+        "/login/testing-username-password",
+        json={"username": "deactivated-testing-user", "password": "password"},
+    )
+    assert response.status_code == 401
+
+
+def test_create_testing_username_password_user_task(
+    database, testing_username_password_client, monkeypatch
+):
+    import importlib.util
+    from pathlib import Path
+
+    from pydatalab.config import CONFIG
+    from pydatalab.testing_username_password_auth import (
+        load_testing_username_password_credentials,
+    )
+
+    tasks_path = Path(__file__).parents[2] / "tasks.py"
+    spec = importlib.util.spec_from_file_location("pydatalab_tasks", tasks_path)
+    tasks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tasks)
+
+    monkeypatch.setattr(CONFIG, "ENABLE_TEST_USERS", True)
+
+    tasks.create_testing_username_password_user.body(
+        None,
+        username="task-testing-user",
+        password="password",  # noqa: S106 - this feature is for dev testing only
+        display_name="Task Testing User",
+        contact_email="task-testing-user@example.org",
+        role="admin",
+        account_status="active",
+    )
+
+    credentials = load_testing_username_password_credentials()
+    assert "task-testing-user" in credentials
+
+    user_id = ObjectId(credentials["task-testing-user"]["user_id"])
+    user = database.users.find_one({"_id": user_id})
+    assert user["display_name"] == "Task Testing User"
+    assert user["contact_email"] == "task-testing-user@example.org"
+    assert "identities" not in user
+    assert database.roles.find_one({"_id": user_id})["role"] == "admin"
+
+    response = testing_username_password_client.post(
+        "/login/testing-username-password",
+        json={"username": "task-testing-user", "password": "password"},
+    )
+    assert response.status_code == 200
 
 
 # ──────────────────────────────────────────────
