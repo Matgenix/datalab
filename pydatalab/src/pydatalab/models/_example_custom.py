@@ -41,7 +41,7 @@ class MySample(Sample):
     type: Literal["my_samples"] = "my_samples"  # type: ignore[assignment]
 
     drying_time: float | None = Field(
-        None, json_schema_extra={"datalab_include_field_in_summary": True}
+        None, json_schema_extra={"datalab_ui": {"include_field_in_summary": True}}
     )
     """An example extra top-level scalar field (hours), surfaced in list views."""
 
@@ -55,7 +55,9 @@ class MyItem(Item):
 
     type: Literal["my_items"] = "my_items"  # type: ignore[assignment]
 
-    width: float | None = Field(None, json_schema_extra={"datalab_include_field_in_summary": True})
+    width: float | None = Field(
+        None, json_schema_extra={"datalab_ui": {"include_field_in_summary": True}}
+    )
     """An example custom dimension (mm), surfaced in list views."""
 
     height: float | None = None

@@ -115,7 +115,7 @@ def register_item_model(model: type[Item]) -> None:
 
 
 def flagged_summary_fields(types) -> list[str]:
-    """Return the field names flagged with ``datalab_include_field_in_summary``
+    """Return the field names flagged with ``datalab_ui.include_field_in_summary``
     in the schemas of the given item types.
 
     Used by the item list/summary endpoints to project additional fields beyond
@@ -123,7 +123,7 @@ def flagged_summary_fields(types) -> list[str]:
     list views declaratively, e.g.::
 
         drying_time: float | None = Field(
-            None, json_schema_extra={"datalab_include_field_in_summary": True}
+            None, json_schema_extra={"datalab_ui": {"include_field_in_summary": True}}
         )
     """
     fields: set[str] = set()
@@ -132,7 +132,9 @@ def flagged_summary_fields(types) -> list[str]:
         if not schema:
             continue
         for name, prop in schema.get("properties", {}).items():
-            if isinstance(prop, dict) and prop.get("datalab_include_field_in_summary"):
+            if isinstance(prop, dict) and (prop.get("datalab_ui") or {}).get(
+                "include_field_in_summary"
+            ):
                 fields.add(name)
     return sorted(fields)
 

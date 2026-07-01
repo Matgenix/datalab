@@ -250,7 +250,7 @@ def get_items_summary(match: dict | None = None, project: dict | None = None) ->
     }
 
     # Include any fields (across all registered item types, including custom
-    # ones) that opt into summaries via `datalab_include_field_in_summary`.
+    # ones) that opt into summaries via `datalab_ui.include_field_in_summary`.
     for field in flagged_summary_fields(ITEM_MODELS):
         _project.setdefault(field, 1)
 
@@ -334,7 +334,7 @@ def get_samples_summary(match: dict | None = None, project: dict | None = None) 
     }
 
     # Include any fields on samples/cells/custom types that opt into summaries
-    # via `datalab_include_field_in_summary`.
+    # via `datalab_ui.include_field_in_summary`.
     for field in flagged_summary_fields(ITEM_MODELS):
         _project.setdefault(field, 1)
 

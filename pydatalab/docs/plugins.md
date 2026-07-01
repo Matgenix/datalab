@@ -89,7 +89,7 @@ class MySample(Sample):
     drying_time: float | None = Field(
         None,
         # opt this field into item list/summary views:
-        json_schema_extra={"datalab_include_field_in_summary": True},
+        json_schema_extra={"datalab_ui": {"include_field_in_summary": True}},
     )
 ```
 
@@ -118,7 +118,7 @@ There are two ways to register a custom item type, both of which run at server s
     ```
 
 Custom types must use a `type` value that does not collide with a built-in type.
-Fields tagged with `json_schema_extra={"datalab_include_field_in_summary": True}` are additionally included in item list/summary responses.
+Fields tagged with `json_schema_extra={"datalab_ui": {"include_field_in_summary": True}}` are additionally included in item list/summary responses.
 A worked example of both a `Sample` subclass and a standalone `Item` subclass lives at `pydatalab/src/pydatalab/models/_example_custom.py`.
 
 ### Rendering a custom type in the web UI
@@ -131,27 +131,28 @@ and on the edit page shows:
 - a **custom-fields panel** that diffs the type's schema against its base type and renders only
   the fields the model *adds*.
 
-Each added field is rendered from its JSON-Schema type plus a small set of `json_schema_extra`
-annotations on the field:
+Each added field is rendered from its JSON-Schema type plus a small set of `datalab_ui`
+annotations on the field, nested under a single `json_schema_extra={"datalab_ui": {...}}` dict:
 
-| `Field(json_schema_extra=…)` key | Effect in the UI |
+| `datalab_ui` key | Effect in the UI |
 |---|---|
-| `datalab_include_field_in_summary` | also show the field as a column in list / summary views |
-| `datalab_hidden` | store the field but don't render it (e.g. a companion unit field) |
-| `datalab_unit_field` | name of a companion field holding the unit; renders a value box + unit dropdown |
-| `datalab_units` / `datalab_default_unit` | unit options, and the default, for that dropdown |
-| `datalab_ref_types` | render as an item-search selector restricted to these item types — i.e. a link to another item (built-in *or* custom) |
-| `datalab_section` | group this field into its own titled card |
-| `datalab_multiline` | render a string as a multi-line text area |
+| `include_field_in_summary` | also show the field as a column in list / summary views |
+| `hidden` | store the field but don't render it (e.g. a companion unit field) |
+| `unit_field` | name of a companion field holding the unit; renders a value box + unit dropdown |
+| `units` / `default_unit` | unit options, and the default, for that dropdown |
+| `ref_types` | render as an item-search selector restricted to these item types — i.e. a link to another item (built-in *or* custom) |
+| `section` | group this field into its own titled card |
+| `multiline` | render a string as a multi-line text area |
 
-A few keys on the model's `model_config` control the type as a whole:
+A few keys on the model's `model_config` control the type as a whole, also nested under
+`json_schema_extra={"datalab_ui": {...}}` (plus `title`, which is a plain pydantic config key):
 
 | `ConfigDict(json_schema_extra=…)` / config key | Effect in the UI |
 |---|---|
 | `title` | display name of the type (navbar, create dialog) |
-| `datalab_ui_color` | accent colour for the navbar, field labels and the item's reference badge |
-| `datalab_ui_hidden_fields` | base-component sections to hide (`status`, `collections`, `description`, `substance_information`, `synthesis_information`) |
-| `datalab_section_title` | title of the default custom-fields card |
+| `datalab_ui.color` | accent colour for the navbar, field labels and the item's reference badge |
+| `datalab_ui.hidden_fields` | base-component sections to hide (`status`, `collections`, `description`, `substance_information`, `synthesis_information`) |
+| `datalab_ui.section_title` | title of the default custom-fields card |
 
 Only **scalar-like** fields are rendered automatically: strings, numbers, enums, booleans, unit
 quantities, and single item references. Lists, nested objects, computed values or charts need a
@@ -168,31 +169,36 @@ class Solution(Sample):
     model_config = ConfigDict(
         title="Solution",
         json_schema_extra={
-            "datalab_ui_hidden_fields": ["synthesis_information"],
-            "datalab_section_title": "Solution",
-            "datalab_ui_color": "#3a7ca5",
+            "datalab_ui": {
+                "hidden_fields": ["synthesis_information"],
+                "section_title": "Solution",
+                "color": "#3a7ca5",
+            },
         },
     )
     type: Literal["solutions"] = "solutions"
 
     # Fields linking to a built-in `starting_materials` or another `samples` item:
     solute: EntryReference | None = Field(
-        None, json_schema_extra={"datalab_ref_types": ["starting_materials", "samples"]}
+        None, json_schema_extra={"datalab_ui": {"ref_types": ["starting_materials", "samples"]}}
     )
     solvent: EntryReference | None = Field(
-        None, json_schema_extra={"datalab_ref_types": ["starting_materials", "samples"]}
+        None, json_schema_extra={"datalab_ui": {"ref_types": ["starting_materials", "samples"]}}
     )
 
     concentration: float | None = Field(
         None,
         json_schema_extra={
-            "datalab_units": ["mol/L", "mmol/L"], "datalab_default_unit": "mol/L",
-            "datalab_unit_field": "concentration_unit",
-            "datalab_include_field_in_summary": True,
+            "datalab_ui": {
+                "units": ["mol/L", "mmol/L"],
+                "default_unit": "mol/L",
+                "unit_field": "concentration_unit",
+                "include_field_in_summary": True,
+            },
         },
     )
     concentration_unit: Literal["mol/L", "mmol/L"] = Field(
-        "mol/L", json_schema_extra={"datalab_hidden": True}
+        "mol/L", json_schema_extra={"datalab_ui": {"hidden": True}}
     )
 ```
 

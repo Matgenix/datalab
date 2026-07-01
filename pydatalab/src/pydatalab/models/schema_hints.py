@@ -1,8 +1,8 @@
 """Typed definitions of the ``datalab_*`` ``json_schema_extra`` hints.
 
 Item models tag fields and model config with ``datalab_*`` keys that the API and
-web UI read back (summary projection, field rendering, grouping, ...). The two
-models below list the valid keys; :func:`validate_schema_hints` checks them at
+web UI read back (summary projection, field rendering, grouping, ...). The models
+below list the valid keys; :func:`validate_schema_hints` checks them at
 registration, and ``invoke dev.generate-schemas`` exports them as JSON schemas.
 
 Call sites keep writing plain dicts. The field names here match the literal keys,
@@ -14,34 +14,43 @@ from pydantic import ConfigDict, ValidationError
 from pydatalab.models.utils import BaseModel
 
 
+class DatalabUIFieldExtra(BaseModel):
+    """UI rendering hints attached to a field via ``json_schema_extra={"datalab_ui": {...}}``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    include_field_in_summary: bool | None = None
+    """Also show this field in list/summary views."""
+
+    hidden: bool | None = None
+    """Store but don't render this field (e.g. a companion unit field)."""
+
+    multiline: bool | None = None
+    """Render a string as a multi-line textarea."""
+
+    section: str | None = None
+    """Group fields sharing this section string into their own card."""
+
+    ref_types: list[str] | None = None
+    """Render an item-reference widget restricted to these item types."""
+
+    unit_field: str | None = None
+    """Companion field holding the unit; renders a value box + unit dropdown."""
+
+    units: list[str] | None = None
+    """Unit options for the dropdown (with ``unit_field``)."""
+
+    default_unit: str | None = None
+    """Default unit for the dropdown."""
+
+
 class DatalabFieldExtra(BaseModel):
     """Datalab hints attached to a field via ``json_schema_extra``."""
 
     model_config = ConfigDict(extra="forbid")
 
-    datalab_include_field_in_summary: bool | None = None
-    """Also show this field in list/summary views."""
-
-    datalab_hidden: bool | None = None
-    """Store but don't render this field (e.g. a companion unit field)."""
-
-    datalab_multiline: bool | None = None
-    """Render a string as a multi-line textarea."""
-
-    datalab_section: str | None = None
-    """Group fields sharing this section string into their own card."""
-
-    datalab_ref_types: list[str] | None = None
-    """Render an item-reference widget restricted to these item types."""
-
-    datalab_unit_field: str | None = None
-    """Companion field holding the unit; renders a value box + unit dropdown."""
-
-    datalab_units: list[str] | None = None
-    """Unit options for the dropdown (with ``datalab_unit_field``)."""
-
-    datalab_default_unit: str | None = None
-    """Default unit for the dropdown."""
+    datalab_ui: DatalabUIFieldExtra | None = None
+    """UI rendering hints consumed by the web app's custom-fields panel."""
 
     datalab_exclude_from_db: bool | None = None
     """Don't persist this field to the database (block models)."""
@@ -50,19 +59,29 @@ class DatalabFieldExtra(BaseModel):
     """Don't populate this field when loading from the database (block models)."""
 
 
+class DatalabUIModelExtra(BaseModel):
+    """UI rendering hints attached to a model's config via
+    ``model_config['json_schema_extra']['datalab_ui']``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hidden_fields: list[str] | None = None
+    """Inherited field names to hide from the UI for this item type."""
+
+    color: str | None = None
+    """Accent colour (CSS hex) used for this item type in the UI."""
+
+    section_title: str | None = None
+    """Title of the default custom-fields card."""
+
+
 class DatalabModelExtra(BaseModel):
     """Datalab hints attached to a model via ``model_config['json_schema_extra']``."""
 
     model_config = ConfigDict(extra="forbid")
 
-    datalab_ui_hidden_fields: list[str] | None = None
-    """Inherited field names to hide from the UI for this item type."""
-
-    datalab_ui_color: str | None = None
-    """Accent colour (CSS hex) used for this item type in the UI."""
-
-    datalab_section_title: str | None = None
-    """Title of the default custom-fields card."""
+    datalab_ui: DatalabUIModelExtra | None = None
+    """UI hints consumed by the web app for this item type as a whole."""
 
     datalab_base_type: str | None = None
     """Built-in type this derives from, when not inferable from the class hierarchy."""

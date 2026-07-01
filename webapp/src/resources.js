@@ -166,7 +166,7 @@ export function prettifyType(type) {
 
 // Lighten a hex colour toward white to produce a pastel badge/tint background,
 // mirroring the hand-picked `lightColor` pastels of the built-in types. Used to give
-// custom (plugin) types a coloured badge derived from their `datalab_ui_color`.
+// custom (plugin) types a coloured badge derived from their `datalab_ui.color`.
 function lightTint(hex, amount = 0.82) {
   const h = (hex || "").replace("#", "");
   if (h.length !== 6) return "#e0e0e0";
@@ -184,7 +184,7 @@ function lightTint(hex, amount = 0.82) {
 // - base_type: the built-in type string this model inherits from (e.g. "samples")
 // - hidden_fields: base-component fields the plugin wants to hide (from model_config)
 // - title: human-readable display name
-// - ui_color: accent color for navbar/labels (`datalab_ui_color` on model_config)
+// - ui_color: accent color for navbar/labels (`datalab_ui.color` on model_config)
 export function registerDynamicItemType(type, { title, base_type, hidden_fields, ui_color } = {}) {
   if (!type || itemTypes[type]) return; // never clobber a built-in / existing entry
   const display = title || prettifyType(type);

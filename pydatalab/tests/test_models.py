@@ -10,11 +10,10 @@ from pydatalab.models.files import File
 from pydatalab.models.items import Item
 from pydatalab.models.people import DisplayName, EmailStr
 from pydatalab.models.relationships import (
-    KnownType,
     RelationshipType,
     TypedRelationship,
 )
-from pydatalab.models.utils import HumanReadableIdentifier, Refcode
+from pydatalab.models.utils import HumanReadableIdentifier, KnownType, Refcode
 
 
 def test_sample_with_inlined_reference():
@@ -689,20 +688,26 @@ def test_builtin_models_have_valid_schema_hints():
 def test_datalab_field_extra_rejects_unknown_and_mistyped_hints():
     from pydatalab.models.schema_hints import DatalabFieldExtra
 
-    # Unknown datalab_ key.
+    # Unknown top-level datalab_ key.
     with pytest.raises(pydantic.ValidationError):
         DatalabFieldExtra(datalab_include_in_summary=True)
 
-    # Wrong type for a known key.
+    # Unknown key nested inside datalab_ui.
     with pytest.raises(pydantic.ValidationError):
-        DatalabFieldExtra(datalab_ref_types="equipment")
+        DatalabFieldExtra(datalab_ui={"include_in_summary": True})
+
+    # Wrong type for a known nested key.
+    with pytest.raises(pydantic.ValidationError):
+        DatalabFieldExtra(datalab_ui={"ref_types": "equipment"})
 
     # A valid set of hints passes.
     DatalabFieldExtra(
-        datalab_include_field_in_summary=True,
-        datalab_ref_types=["equipment"],
-        datalab_units=["mV", "V"],
-        datalab_default_unit="V",
+        datalab_ui={
+            "include_field_in_summary": True,
+            "ref_types": ["equipment"],
+            "units": ["mV", "V"],
+            "default_unit": "V",
+        }
     )
 
 
@@ -712,9 +717,16 @@ def test_validate_schema_hints_raises_for_bad_field_hint():
     from pydatalab.models.schema_hints import validate_schema_hints
     from pydatalab.models.utils import BaseModel
 
-    class _BadHints(BaseModel):
-        # `datalab_multlinee` is a typo of `datalab_multiline`.
+    class _BadTopLevelHints(BaseModel):
+        # `datalab_multlinee` is a typo; unknown namespaces are rejected too.
         widget: str | None = Field(None, json_schema_extra={"datalab_multlinee": True})
 
     with pytest.raises(ValueError, match="widget"):
-        validate_schema_hints(_BadHints)
+        validate_schema_hints(_BadTopLevelHints)
+
+    class _BadNestedHints(BaseModel):
+        # `multlinee` is a typo of `multiline`, nested inside datalab_ui.
+        widget: str | None = Field(None, json_schema_extra={"datalab_ui": {"multlinee": True}})
+
+    with pytest.raises(ValueError, match="widget"):
+        validate_schema_hints(_BadNestedHints)

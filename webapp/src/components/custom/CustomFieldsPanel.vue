@@ -13,7 +13,7 @@
       <div class="plugin-card-body">
         <!-- Renders scalar fields only: item-reference selectors, numbers, strings, enums,
              booleans. Structural fields (lists, nested objects) need a custom plugin panel.
-             Fields can be grouped into separate cards via the `datalab_section` annotation. -->
+             Fields can be grouped into separate cards via the `datalab_ui.section` annotation. -->
         <div class="form-row mb-2">
           <div
             v-for="field in section.fields"
@@ -126,7 +126,7 @@
               "
             />
 
-            <!-- Multi-line string (datalab_multiline) -->
+            <!-- Multi-line string (datalab_ui.multiline) -->
             <textarea
               v-else-if="field.multiline"
               :id="'custom-' + field.name"
@@ -177,7 +177,7 @@ const SCALAR_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
 function resolveField(name, rawSchema) {
   const { schema } = unwrapNullable(rawSchema);
-  const extra = rawSchema["x-json_schema_extra"] || rawSchema;
+  const extra = (rawSchema["x-json_schema_extra"] || rawSchema).datalab_ui || {};
   return {
     name,
     title: rawSchema.title || prettifyType(name),
@@ -185,15 +185,15 @@ function resolveField(name, rawSchema) {
     type: schema.type || "string",
     enum: schema.enum || null,
     readOnly: rawSchema.readOnly === true,
-    refTypes: extra.datalab_ref_types || null,
-    // Optional grouping: fields sharing a `datalab_section` render in their own card.
-    section: extra.datalab_section || null,
+    refTypes: extra.ref_types || null,
+    // Optional grouping: fields sharing a `datalab_ui.section` render in their own card.
+    section: extra.section || null,
     // Render a long string as a multi-line <textarea> instead of a single-line input.
-    multiline: extra.datalab_multiline === true,
+    multiline: extra.multiline === true,
     // Number+unit compound widget
-    unitField: extra.datalab_unit_field || null,
-    unitOptions: extra.datalab_units || null,
-    defaultUnit: extra.datalab_default_unit || null,
+    unitField: extra.unit_field || null,
+    unitOptions: extra.units || null,
+    defaultUnit: extra.default_unit || null,
   };
 }
 
@@ -223,7 +223,7 @@ export default {
         : null;
     },
     sectionTitle() {
-      return this.typeSchema?.datalab_section_title || null;
+      return this.typeSchema?.datalab_ui?.section_title || null;
     },
     customFields() {
       if (!this.typeSchema || !this.baseSchema) return [];
@@ -233,20 +233,20 @@ export default {
       return Object.entries(typeProps)
         .filter(([name, schema]) => {
           if (baseProps.includes(name) || name === "type") return false;
-          const extra = schema["x-json_schema_extra"] || schema;
-          if (extra.datalab_hidden) return false;
-          // Render only scalar-ish fields. Item references (datalab_ref_types) and enums
+          const extra = (schema["x-json_schema_extra"] || schema).datalab_ui || {};
+          if (extra.hidden) return false;
+          // Render only scalar-ish fields. Item references (datalab_ui.ref_types) and enums
           // are renderable too; structural fields (arrays/objects) need a custom panel.
           const { schema: unwrapped } = unwrapNullable(schema);
           const renderable =
-            !!extra.datalab_ref_types || !!unwrapped.enum || SCALAR_TYPES.has(unwrapped.type);
+            !!extra.ref_types || !!unwrapped.enum || SCALAR_TYPES.has(unwrapped.type);
           return renderable;
         })
         .map(([name, schema]) => resolveField(name, schema));
     },
-    // Group fields into cards by their `datalab_section`. Ungrouped fields form the
-    // default card (titled by `datalab_section_title`), which always renders first;
-    // each distinct `datalab_section` then renders as its own titled card, in the order
+    // Group fields into cards by their `datalab_ui.section`. Ungrouped fields form the
+    // default card (titled by `datalab_ui.section_title`), which always renders first;
+    // each distinct section then renders as its own titled card, in the order
     // the sections first appear in the schema.
     sections() {
       const groups = new Map();

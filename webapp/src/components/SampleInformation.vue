@@ -25,7 +25,10 @@
               <FormattedRefcode :refcode="Refcode" />
             </div>
           </div>
-          <div v-if="!hiddenFields.includes('status')" class="form-group col-md-3 col-sm-3 col-3 pb-3">
+          <div
+            v-if="!hiddenFields.includes('status')"
+            class="form-group col-md-3 col-sm-3 col-3 pb-3"
+          >
             <ToggleableItemStatusFormGroup
               v-model="Status"
               :possible-item-statuses="possibleItemStatuses"

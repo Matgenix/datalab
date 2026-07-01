@@ -68,7 +68,7 @@ def test_custom_types_listed_in_info_types(client, custom_item_models):
     assert "custom_properties" in properties
     assert "chemform" in properties
     # The summary flag is carried through into the schema.
-    assert properties["drying_time"].get("datalab_include_field_in_summary") is True
+    assert properties["drying_time"]["datalab_ui"]["include_field_in_summary"] is True
 
     item_schema = client.get("/info/types/my_items", follow_redirects=True).json["data"][
         "attributes"

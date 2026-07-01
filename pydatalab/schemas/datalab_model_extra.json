@@ -1,48 +1,70 @@
 {
+  "$defs": {
+    "DatalabUIModelExtra": {
+      "additionalProperties": false,
+      "description": "UI rendering hints attached to a model's config via\n``model_config['json_schema_extra']['datalab_ui']``.",
+      "properties": {
+        "hidden_fields": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Inherited field names to hide from the UI for this item type.",
+          "title": "Hidden Fields"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Accent colour (CSS hex) used for this item type in the UI.",
+          "title": "Color"
+        },
+        "section_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Title of the default custom-fields card.",
+          "title": "Section Title"
+        }
+      },
+      "title": "DatalabUIModelExtra",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "description": "Datalab hints attached to a model via ``model_config['json_schema_extra']``.",
   "properties": {
-    "datalab_ui_hidden_fields": {
+    "datalab_ui": {
       "anyOf": [
         {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+          "$ref": "#/$defs/DatalabUIModelExtra"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "Inherited field names to hide from the UI for this item type.",
-      "title": "Datalab Ui Hidden Fields"
-    },
-    "datalab_ui_color": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Accent colour (CSS hex) used for this item type in the UI.",
-      "title": "Datalab Ui Color"
-    },
-    "datalab_section_title": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Title of the default custom-fields card.",
-      "title": "Datalab Section Title"
+      "description": "UI hints consumed by the web app for this item type as a whole."
     },
     "datalab_base_type": {
       "anyOf": [

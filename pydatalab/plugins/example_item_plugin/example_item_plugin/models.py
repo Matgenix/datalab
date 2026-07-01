@@ -25,34 +25,38 @@ class Solution(Sample):
     model_config = ConfigDict(
         title="Solution",
         json_schema_extra={
-            "datalab_ui_color": "#3a7ca5",
-            "datalab_ui_hidden_fields": ["synthesis_information"],
-            "datalab_section_title": "Solution",
+            "datalab_ui": {
+                "color": "#3a7ca5",
+                "hidden_fields": ["synthesis_information"],
+                "section_title": "Solution",
+            },
         },
     )
 
     type: Literal["solutions"] = "solutions"  # type: ignore[assignment]
 
     solute: EntryReference | None = Field(
-        None, json_schema_extra={"datalab_ref_types": _SUBSTANCE_REF_TYPES}
+        None, json_schema_extra={"datalab_ui": {"ref_types": _SUBSTANCE_REF_TYPES}}
     )
 
     concentration: float | None = Field(
         None,
         ge=0,
         json_schema_extra={
-            "datalab_include_field_in_summary": True,
-            "datalab_units": ["mol/L", "mmol/L"],
-            "datalab_default_unit": "mol/L",
-            "datalab_unit_field": "concentration_unit",
+            "datalab_ui": {
+                "include_field_in_summary": True,
+                "units": ["mol/L", "mmol/L"],
+                "default_unit": "mol/L",
+                "unit_field": "concentration_unit",
+            },
         },
     )
     concentration_unit: Literal["mol/L", "mmol/L"] = Field(
-        "mol/L", json_schema_extra={"datalab_hidden": True}
+        "mol/L", json_schema_extra={"datalab_ui": {"hidden": True}}
     )
 
     solvent: EntryReference | None = Field(
-        None, json_schema_extra={"datalab_ref_types": _SUBSTANCE_REF_TYPES}
+        None, json_schema_extra={"datalab_ui": {"ref_types": _SUBSTANCE_REF_TYPES}}
     )
 
 
@@ -70,7 +74,8 @@ class MixedSolution(Sample):
     resulting per-solute concentrations and total volume)."""
 
     model_config = ConfigDict(
-        title="Mixed Solution", json_schema_extra={"datalab_ui_color": "#b5651d"}
+        title="Mixed Solution",
+        json_schema_extra={"datalab_ui": {"color": "#b5651d"}},
     )
 
     type: Literal["mixed_solutions"] = "mixed_solutions"  # type: ignore[assignment]
