@@ -14,11 +14,29 @@ COPY webapp/package.json webapp/yarn.lock ./
 RUN --mount=type=cache,target=/root/.cache/yarn yarn install --frozen-lockfile --modules-folder /node_modules
 
 # dev target: deps installed, source mounted at runtime — no production build.
+# Also installs the system libraries the Cypress test runner needs (GTK/X11
+# runtime libs plus xvfb for a virtual display), so the webapp test suites can
+# run inside the container.
 FROM base AS dev
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        libgtk2.0-0 \
+        libgtk-3-0 \
+        libgbm-dev \
+        libnotify-dev \
+        libnss3 \
+        libxss1 \
+        libasound2 \
+        libxtst6 \
+        xauth \
+        xvfb \
+    && rm -rf /var/lib/apt/lists/*
 COPY webapp ./
 
-# build target: runs the production webpack bundle on top of dev.
-FROM dev AS build
+# build target: runs the production webpack bundle. Derives from `base` rather
+# than `dev` so production builds don't pull in the Cypress system libraries.
+FROM base AS build
+COPY webapp ./
 # These get replaced by the entrypoint script for production builds.
 # Set the real values in `.env` files or an external docker-compose.
 ENV NODE_ENV=production
