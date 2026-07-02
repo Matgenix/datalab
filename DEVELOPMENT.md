@@ -52,6 +52,18 @@ docker compose --profile dev up
 Backend tests run natively (the Docker dev image ships without test deps); from
 `pydatalab/` use `uv sync --all-extras --dev` once, then `uv run pytest`.
 
+The webapp dev image includes the system libraries Cypress needs, so component
+tests can run inside the container (use the full binary path — `node_modules`
+lives at `/node_modules`, outside the bind-mounted source):
+
+```bash
+docker compose exec app-dev /node_modules/.bin/cypress run --component
+```
+
+e2e tests are not wired up for in-container use yet (`cypress.config.ts` points
+at `localhost` URLs); run those natively with `yarn test:e2e` against the
+containerised API.
+
 
 ## `dev` vs `prod` profiles
 
