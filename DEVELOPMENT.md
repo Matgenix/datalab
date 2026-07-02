@@ -4,10 +4,9 @@ Hot-reloading datalab stack (API + web app + MongoDB) in Docker. Only Docker is 
 
 ## Quick start
 
-```bash
-cp pydatalab/.env.example pydatalab/.env     # backend config (edit it, see below)
-cp webapp/.env.example webapp/.env           # web app config
+Create the two `.env` files below, then:
 
+```bash
 docker compose --profile dev up --build      # first run builds; later just `up`
 docker compose exec api-dev /opt/.venv/bin/invoke dev.seed   # optional: spawn example data in the DB
 ```
@@ -19,19 +18,54 @@ docker compose exec api-dev /opt/.venv/bin/invoke dev.seed   # optional: spawn e
 Edits to `pydatalab/` and `webapp/` hot-reload. Editing `.env` does not — restart the
 service: `docker compose --profile dev restart api-dev` (or `app-dev`).
 
+### Copy into `pydatalab/.env`
+
+Read by `invoke dev.serve` natively and inside the Docker dev container (the
+`./pydatalab:/app` bind-mount maps it to `/app/.env`). `.env` files are gitignored.
+Full settings reference: https://docs.datalab-org.io/en/latest/config/
+
+```bash
+PYDATALAB_IDENTIFIER_PREFIX=dev
+
+# Option A: no auth — every API call runs as authenticated (dev only); good for
+# backend/block work. NOTE: the web app UI still shows a login prompt in this mode.
+PYDATALAB_TESTING=true
+
+# Option B: real GitHub login. Set TESTING=false above and uncomment; create the
+# OAuth App at https://github.com/settings/developers with
+#   Homepage URL:               http://localhost:8081
+#   Authorization callback URL: http://localhost:5001/login/github/authorized
+#
+# PYDATALAB_SECRET_KEY=      # generate: python3 -c 'import secrets; print(secrets.token_hex(64))'
+# PYDATALAB_BEHIND_REVERSE_PROXY=False
+# PYDATALAB_AUTO_ACTIVATE_ACCOUNTS=True
+# PYDATALAB_GITHUB_ORG_ALLOW_LIST=null
+# OAUTHLIB_INSECURE_TRANSPORT=1          # local HTTP only; never set in production
+# GITHUB_OAUTH_CLIENT_ID=                # no PYDATALAB_ prefix on these two
+# GITHUB_OAUTH_CLIENT_SECRET=
+```
+
+### Copy into `webapp/.env` (optional)
+
+The dev compose stack already points the web app at the dev API, so this file is
+only needed to customise the rest.
+
+```bash
+VUE_APP_WEBSITE_TITLE=datalab (dev)
+VUE_APP_EDITABLE_INVENTORY=true
+VUE_APP_AUTOMATICALLY_GENERATE_ID_DEFAULT=false
+# VUE_APP_LOGO_URL=
+# VUE_APP_HOMEPAGE_URL=
+# VUE_APP_QR_CODE_RESOLVER_URL=
+```
+
 ## Logging in
 
-The web app needs a logged-in session. Set up GitHub OAuth once:
-
-1. Create an OAuth App at https://github.com/settings/developers
-   - Homepage URL: `http://localhost:8081`
-   - Authorization callback URL: `http://localhost:5001/login/github/authorized`
-2. Put the credentials in `pydatalab/.env` (see the commented GitHub block in
-   `.env.example`), set `PYDATALAB_TESTING=false`, restart `api-dev`.
-3. Set `PYDATALAB_SECRET_KEY` to a real value (generate one with
-   `python3 -c 'import secrets; print(secrets.token_hex(64))'`).
-4. **Login via GitHub** in the web app.
-
+The web app needs a logged-in session: set up Option B (GitHub OAuth) in the
+`pydatalab/.env` template above, restart `api-dev`, and **Login via GitHub** in
+the web app. Option A (`PYDATALAB_TESTING=true`) is enough for API-only work —
+every call runs as authenticated — but the web app UI has no session and keeps
+showing its login prompt.
 
 ## Handy commands
 
