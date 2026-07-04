@@ -2,6 +2,7 @@
   <div class="qr">
     <div class="qr__field">
       <span class="qr__field-icon">{{ fieldIcon }}</span>
+      <!-- TODO: Render structured subfields hierarchically; flat dot-path fields work for now. -->
       <select :value="node.field" class="qr__select" @change="onFieldChange($event.target.value)">
         <option value="" disabled>Field…</option>
         <optgroup v-for="group in groupedFields" :key="group.label" :label="group.label">
@@ -144,10 +145,10 @@ export default {
 <style scoped>
 .qr {
   display: grid;
-  grid-template-columns: 0.85fr 0.75fr 1.4fr 36px;
+  grid-template-columns: 1fr 1fr 1fr 36px;
   gap: 10px;
-  align-items: start;
-  padding: 10px 10px;
+  align-items: center;
+  padding: 8px 10px;
   background: #fff;
   border: 1px solid #e9ecef;
   border-radius: 8px;
@@ -162,7 +163,6 @@ export default {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding-top: 2px;
 }
 .qr__field-icon {
   font-size: 0.8rem;
@@ -171,10 +171,7 @@ export default {
   width: 18px;
   text-align: center;
 }
-.qr__operator {
-  min-width: 0;
-  padding-top: 2px;
-}
+.qr__operator,
 .qr__value {
   min-width: 0;
 }

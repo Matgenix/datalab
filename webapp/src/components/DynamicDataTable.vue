@@ -47,6 +47,7 @@
           :selected-columns="selectedColumns"
           :collection-id="collectionId"
           :all-users="allUsersForBulk"
+          :advanced-query-config="advancedQueryConfig"
           @update:filters="updateFilters"
           @update:selected-columns="onToggleColumns"
           @open-create-item-modal="createItemModalIsOpen = true"
@@ -615,6 +616,7 @@ import Column from "primevue/column";
 import InputText from "primevue/inputtext";
 import DatePicker from "primevue/datepicker";
 import Select from "primevue/select";
+import { fetchAdvancedQueryConfig } from "@/server_fetch_utils.js";
 
 export default {
   components: {
@@ -709,6 +711,8 @@ export default {
       batchShareModalIsOpen: false,
       isSampleFetchError: false,
       advancedQueryResults: null,
+      advancedQueryConfig: null,
+      advancedQueryConfigRequestId: 0,
       itemsSelected: [],
       allSelected: false,
       filters: {
@@ -982,8 +986,16 @@ export default {
       return this.$store.state.groups_list || [];
     },
   },
+  watch: {
+    dataType() {
+      this.advancedQueryConfig = null;
+      this.advancedQueryResults = null;
+      this.loadAdvancedQueryConfig();
+    },
+  },
   created() {
     this.$store.commit("setPage", { type: this.dataType, page: 0 });
+    this.loadAdvancedQueryConfig();
 
     const savedState = localStorage.getItem(`datatable-state-${this.dataType}`);
     if (savedState) {
@@ -1229,6 +1241,21 @@ export default {
     });
   },
   methods: {
+    async loadAdvancedQueryConfig() {
+      const requestId = ++this.advancedQueryConfigRequestId;
+      const dataType = this.dataType;
+      try {
+        const config = await fetchAdvancedQueryConfig(dataType);
+        if (requestId === this.advancedQueryConfigRequestId && dataType === this.dataType) {
+          this.advancedQueryConfig = config;
+        }
+      } catch (error) {
+        console.error("Failed to load advanced query configuration:", error);
+        if (requestId === this.advancedQueryConfigRequestId) {
+          this.advancedQueryConfig = null;
+        }
+      }
+    },
     getColumnMinWidth(column) {
       const COLUMN_BASE_PADDING = 2.5;
       const CHAR_WIDTH_ESTIMATE = 0.75;

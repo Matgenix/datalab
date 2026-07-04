@@ -89,8 +89,9 @@
 
       <div class="search-settings-group">
         <AdvancedQueryBuilder
-          v-if="dataType === 'samples'"
-          :list-view="'samples'"
+          v-if="advancedQueryConfig && advancedQueryConfig.isEnabled"
+          :list-view="advancedQueryConfig.listViewName"
+          :query-options="advancedQueryConfig.options"
           @query-results="$emit('advanced-query-results', $event)"
         />
 
@@ -374,6 +375,11 @@ export default {
       type: Array,
       required: false,
       default: () => [],
+    },
+    advancedQueryConfig: {
+      type: Object,
+      required: false,
+      default: null,
     },
   },
   emits: [

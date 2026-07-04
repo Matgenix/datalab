@@ -96,7 +96,7 @@
                   <QueryGroup
                     :node="rootGroup"
                     :fields="schema.fields"
-                    :max-depth="schema.capabilities.max_depth"
+                    :max-depth="schema?.capabilities?.max_depth ?? 0"
                     :current-depth="0"
                     @update:node="rootGroup = $event"
                   />
@@ -137,18 +137,20 @@ export default {
   components: { QueryGroup },
   props: {
     listView: { type: String, default: "samples" },
+    queryOptions: { type: Object, default: null },
   },
   emits: ["query-results"],
   data() {
     return {
       isOpen: false,
       itemTypes: [],
+      queryRoute: "/query",
       typesLoading: false,
       typesError: null,
       selectedType: null,
       pendingTypeChange: null,
       stalRulesCount: 0,
-      schema: null,
+      schema: { capabilities: { max_depth: 0 }, fields: [] },
       schemaLoading: false,
       schemaError: null,
       rootGroup: this.emptyGroup(),
@@ -184,8 +186,15 @@ export default {
   async mounted() {
     this.typesLoading = true;
     try {
-      const result = await fetchItemTypes(this.listView);
-      this.itemTypes = result.item_types || [];
+      this.queryRoute = this.queryOptions?.queryRoute || "/query";
+      this.itemTypes = this.queryOptions?.item_types || [];
+      if (!this.itemTypes.length && this.queryOptions?.query_types) {
+        this.itemTypes = this.queryOptions.query_types;
+      }
+      if (!this.itemTypes.length) {
+        const result = await fetchItemTypes(this.listView);
+        this.itemTypes = result.item_types || [];
+      }
       if (this.itemTypes.length) {
         this.selectedType = this.itemTypes[0].id;
         await this.loadSchema(this.selectedType);
@@ -208,7 +217,11 @@ export default {
       this.schemaLoading = true;
       this.schemaError = null;
       try {
-        this.schema = await fetchQuerySchema(this.listView, [typeId]);
+        const s = await fetchQuerySchema(this.listView, [typeId]);
+        // ensure capabilities and fields exist to avoid runtime errors
+        this.schema = s || { capabilities: { max_depth: 0 }, fields: [] };
+        if (!this.schema.capabilities) this.schema.capabilities = { max_depth: 0 };
+        if (!Array.isArray(this.schema.fields)) this.schema.fields = [];
       } catch (e) {
         this.schemaError = e.message;
       } finally {
@@ -352,7 +365,7 @@ export default {
         return;
       }
       try {
-        const result = await runItemQuery(this.buildRequest({ limit: 200 }));
+        const result = await runItemQuery(this.buildRequest({ limit: 200 }), this.queryRoute);
         const count = result.items?.length ?? 0;
         this.previewCount = result.page?.has_more
           ? `${count}+ items`
@@ -380,7 +393,7 @@ export default {
         do {
           const pageOpts = { limit: 200 };
           if (cursor) pageOpts.cursor = cursor;
-          const result = await runItemQuery(this.buildRequest(pageOpts));
+          const result = await runItemQuery(this.buildRequest(pageOpts), this.queryRoute);
           allItems.push(...(result.items || []));
           cursor = result.page?.has_more ? result.page.next_cursor : null;
         } while (cursor && allItems.length < SAFETY_LIMIT);
