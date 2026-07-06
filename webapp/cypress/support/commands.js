@@ -115,6 +115,36 @@ Cypress.Commands.add("deleteSampleViaAPI", (item_id) => {
   });
 });
 
+Cypress.Commands.add("createTagViaAPI", (data) => {
+  // data: { name, description?, color?, creator_ids?, group_ids? }. Returns the new tag's id.
+  return cy
+    .request({
+      method: "PUT",
+      url: API_URL + "/tags",
+      body: { data },
+      failOnStatusCode: false,
+    })
+    .then((response) => response.body?.data?.immutable_id ?? null);
+});
+
+Cypress.Commands.add("deleteTagByNameViaAPI", (name) => {
+  // Best-effort cleanup: delete every tag visible to the current user with this name.
+  cy.request({ method: "GET", url: API_URL + "/tags", failOnStatusCode: false }).then(
+    (response) => {
+      const tags = response.body?.data ?? [];
+      tags
+        .filter((tag) => tag.name === name)
+        .forEach((tag) => {
+          cy.request({
+            method: "DELETE",
+            url: API_URL + "/tags/" + tag.immutable_id,
+            failOnStatusCode: false,
+          });
+        });
+    },
+  );
+});
+
 Cypress.Commands.add("uploadFileViaAPI", (itemId, path) => {
   cy.log("Upload a test file via the API: " + path);
   cy.fixture(path, "binary")

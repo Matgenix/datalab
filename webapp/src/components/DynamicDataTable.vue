@@ -54,6 +54,7 @@
           @open-qr-scanner-modal="qrScannerModalIsOpen = true"
           @open-create-collection-modal="createCollectionModalIsOpen = true"
           @open-create-equipment-modal="createEquipmentModalIsOpen = true"
+          @open-create-tag-modal="$emit('open-create-tag-modal')"
           @open-add-to-collection-modal="addToCollectionModalIsOpen = true"
           @open-batch-share-modal="batchShareModalIsOpen = true"
           @delete-selected-items="deleteSelectedItems"
@@ -119,6 +120,7 @@
             v-bind="getComponentProps(column.body, slotProps.data)"
             @edit-group="$emit('edit-group', $event)"
             @group-deleted="$emit('group-deleted')"
+            @edit-tag="$emit('edit-tag', $event)"
           />
         </template>
         <template
@@ -607,6 +609,9 @@ import GroupIdCell from "@/components/GroupIdCell.vue";
 import GroupMembersCell from "@/components/GroupMembersCell.vue";
 import GroupActionsCell from "@/components/GroupActionsCell.vue";
 
+import TagBadge from "@/components/TagBadge.vue";
+import TagActionsCell from "@/components/TagActionsCell.vue";
+
 import { FilterMatchMode, FilterOperator, FilterService } from "@primevue/core/api";
 import DataTable from "primevue/datatable";
 import MultiSelect from "primevue/multiselect";
@@ -656,6 +661,8 @@ export default {
     GroupIdCell,
     GroupMembersCell,
     GroupActionsCell,
+    TagBadge,
+    TagActionsCell,
   },
   props: {
     columns: {
@@ -696,6 +703,8 @@ export default {
     "edit-group",
     "group-deleted",
     "groups-data-changed",
+    "open-create-tag-modal",
+    "edit-tag",
   ],
   data() {
     return {
@@ -796,6 +805,10 @@ export default {
           constraints: [{ value: null, matchMode: FilterMatchMode.CONTAINS }],
         },
         description: {
+          operator: FilterOperator.AND,
+          constraints: [{ value: null, matchMode: FilterMatchMode.CONTAINS }],
+        },
+        name: {
           operator: FilterOperator.AND,
           constraints: [{ value: null, matchMode: FilterMatchMode.CONTAINS }],
         },
@@ -1278,7 +1291,7 @@ export default {
       });
     },
     goToEditPage(event) {
-      if (this.dataType === "users") {
+      if (this.dataType === "users" || this.dataType === "tags") {
         return;
       }
       const row = event.data;
@@ -1410,6 +1423,12 @@ export default {
         GroupActionsCell: {
           group: data,
           allGroups: data.allGroups || [],
+        },
+        TagBadge: {
+          tag: data,
+        },
+        TagActionsCell: {
+          tag: data,
         },
       };
 

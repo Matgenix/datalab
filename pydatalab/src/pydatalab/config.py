@@ -206,7 +206,7 @@ class ServerConfig(BaseSettings):
     )
 
     GITHUB_ORG_ALLOW_LIST: list[str] | None = Field(
-        [],
+        None,
         description="A list of GitHub organization IDs (available from `https://api.github.com/orgs/<org_name>`, and are immutable) or organisation names (which can change, so be warned), that the membership of which will be required to register a new datalab account. Setting the value to `None` will allow any GitHub user to register an account.",
     )
 

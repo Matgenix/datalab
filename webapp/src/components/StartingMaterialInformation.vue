@@ -48,6 +48,12 @@
         </div>
 
         <div class="form-row">
+          <div class="form-group col-12 pb-3">
+            <ToggleableTagsFormGroup v-model="Tags" />
+          </div>
+        </div>
+
+        <div class="form-row">
           <div class="form-group col-lg-12 col-sm-12">
             <label for="startmat-location">Location</label>
             <AutoComplete
@@ -129,6 +135,7 @@ import SynthesisInformation from "@/components/SynthesisInformation";
 import ItemRelationshipVisualization from "@/components/ItemRelationshipVisualization";
 import ToggleableCreatorsFormGroup from "@/components/ToggleableCreatorsFormGroup";
 import ToggleableGroupsFormGroup from "@/components/ToggleableGroupsFormGroup";
+import ToggleableTagsFormGroup from "@/components/ToggleableTagsFormGroup";
 
 import AutoComplete from "primevue/autocomplete";
 import { getStartingMaterialList, getEquipmentList } from "@/server_fetch_utils.js";
@@ -149,6 +156,7 @@ export default {
     SubstanceInformation,
     ToggleableCreatorsFormGroup,
     ToggleableGroupsFormGroup,
+    ToggleableTagsFormGroup,
   },
   props: {
     item_id: { type: String, required: true },
@@ -178,6 +186,7 @@ export default {
     Location: createComputedSetterForItemField("location"),
     ItemDescription: createComputedSetterForItemField("description"),
     Collections: createComputedSetterForItemField("collections"),
+    Tags: createComputedSetterForItemField("tags"),
     Refcode: createComputedSetterForItemField("refcode"),
     Status: createComputedSetterForItemField("status"),
     ItemCreators: createComputedSetterForItemField("creators"),
