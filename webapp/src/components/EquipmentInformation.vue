@@ -45,6 +45,12 @@
     </div>
 
     <div class="form-row">
+      <div class="form-group col-12 pb-3">
+        <ToggleableTagsFormGroup v-model="Tags" />
+      </div>
+    </div>
+
+    <div class="form-row">
       <div class="form-group col-md-6">
         <label for="equip-manufacturer" class="mr-2">Manufacturer</label>
         <input id="equip-manufacturer" v-model="Manufacturer" class="form-control" />
@@ -93,6 +99,7 @@ import FormattedRefcode from "@/components/FormattedRefcode";
 import ToggleableCreatorsFormGroup from "@/components/ToggleableCreatorsFormGroup";
 import ToggleableItemStatusFormGroup from "@/components/ToggleableItemStatusFormGroup";
 import ToggleableGroupsFormGroup from "@/components/ToggleableGroupsFormGroup";
+import ToggleableTagsFormGroup from "@/components/ToggleableTagsFormGroup";
 
 export default {
   components: {
@@ -104,6 +111,7 @@ export default {
     ToggleableCreatorsFormGroup,
     ToggleableItemStatusFormGroup,
     ToggleableGroupsFormGroup,
+    ToggleableTagsFormGroup,
   },
   props: {
     item_id: { type: String, required: true },
@@ -123,6 +131,7 @@ export default {
     },
     ItemDescription: createComputedSetterForItemField("description"),
     Collections: createComputedSetterForItemField("collections"),
+    Tags: createComputedSetterForItemField("tags"),
     Manufacturer: createComputedSetterForItemField("manufacturer"),
     Name: createComputedSetterForItemField("name"),
     Location: createComputedSetterForItemField("location"),

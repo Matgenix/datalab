@@ -561,6 +561,67 @@ export function searchCollections(query, nresults = 100) {
   });
 }
 
+export function createTag(data) {
+  // data: { name, description?, color?, creator_ids?, group_ids? }. The caller refreshes the
+  // list via getTags() so rows carry the inlined creators/groups and the `editable` hint that
+  // the PUT response does not include. Rejects with the server message on error (e.g. 409).
+  return fetch_put(`${API_URL}/tags`, { data }).then(function (response_json) {
+    return response_json.data;
+  });
+}
+
+export function updateTag(tagId, data) {
+  // Update a tag's metadata (name/description/color). Rejects with the server message (e.g. 409).
+  return fetch_patch(`${API_URL}/tags/${tagId}`, { data });
+}
+
+export function updateTagPermissions(tagId, creators, groups) {
+  // Replace a tag's owners/groups. Per the backend contract an explicit empty list clears a
+  // scope (e.g. creators: [] makes the tag global); null/omitted leaves it unchanged.
+  return fetch_patch(`${API_URL}/tags/${tagId}/permissions`, { creators, groups });
+}
+
+export function deleteTag(tagId) {
+  return fetch_delete(`${API_URL}/tags/${tagId}`)
+    .then(function (response_json) {
+      if (response_json.status !== "success") {
+        throw new Error("Failed to delete tag: " + response_json.message);
+      }
+      store.commit("deleteFromTagList", tagId);
+    })
+    .catch((error) => {
+      DialogService.error({
+        title: "Permission error",
+        message: "Unable to delete the tag: check that you have the appropriate permissions.",
+      });
+      throw error;
+    });
+}
+
+export function getTags() {
+  return fetch_get(`${API_URL}/tags`)
+    .then(function (response_json) {
+      store.commit("setTagList", response_json.data);
+    })
+    .catch((error) => {
+      if (error === "UNAUTHORIZED") {
+        store.commit("setTagList", []);
+      } else {
+        throw error;
+      }
+    });
+}
+
+export function searchTags(query, nresults = 100) {
+  // construct a url with parameters:
+  var url = new URL(`${API_URL}/search-tags`);
+  var params = { query: query, nresults: nresults };
+  Object.keys(params).forEach((key) => url.searchParams.append(key, params[key]));
+  return fetch_get(url).then(function (response_json) {
+    return response_json.data;
+  });
+}
+
 export function searchGroups(query, nresults = 100) {
   // construct a url with parameters:
   var url = new URL(`${API_URL}/search/groups`);

@@ -184,6 +184,64 @@ def test_file():
     assert sample.files[1].type == "files"
 
 
+def test_tag_model():
+    from pydatalab.models.tags import Tag
+
+    global_tag = Tag(name="test_tag", description="This is an example")
+    assert global_tag.type == "tags"
+    assert global_tag.name == "test_tag"
+    assert global_tag.creator_ids == []
+    assert global_tag.group_ids == []
+
+    oid = ObjectId("0123456789ab0123456789ab")
+    owner_id = ObjectId("1023456789ab0123456789ab")
+    doc = {"_id": oid, "type": "tags", "name": "glovebox", "creator_ids": [owner_id]}
+    owned_tag = Tag(**doc)
+    assert owned_tag.immutable_id == oid
+    assert owned_tag.creator_ids == [owner_id]
+    assert owned_tag.model_dump()["immutable_id"] == oid
+
+    with pytest.raises(pydantic.ValidationError):
+        Tag(description="missing a name")
+
+
+def test_item_tags_coercion():
+    """The `HasTags` mixin coerces and de-duplicates tags on items."""
+    from pydatalab.models.samples import Sample
+    from pydatalab.models.utils import EntryReference
+
+    oid = ObjectId("0123456789ab0123456789ab")
+
+    sample = Sample(
+        item_id="tagged",
+        tags=[
+            "custom",
+            "  custom  ",  # duplicate after stripping -> dropped
+            {"type": "tags", "immutable_id": str(oid), "name": "Curated"},
+            {"_id": oid},  # same reference by id -> dropped
+        ],
+    )
+
+    assert len(sample.tags) == 2
+    assert sample.tags[0] == "custom"
+    ref = sample.tags[1]
+    assert isinstance(ref, EntryReference)
+    assert ref.type == "tags"
+    assert ref.immutable_id == oid
+    assert ref.name == "Curated"
+
+    # Default is an empty list, so existing tag-less documents stay valid.
+    assert Sample(item_id="untagged").tags == []
+
+    # A reference to a (possibly deleted) tag still validates.
+    dangling = Sample(item_id="dangling", tags=[{"type": "tags", "immutable_id": str(ObjectId())}])
+    assert len(dangling.tags) == 1
+
+    # Re-validating a dumped item round-trips the mixed tags list.
+    roundtrip = Sample(**json.loads(sample.model_dump_json()))
+    assert [type(t).__name__ for t in roundtrip.tags] == ["str", "EntryReference"]
+
+
 def test_custom_and_inherited_items():
     class TestItem(Item):
         type: str = "items_custom"

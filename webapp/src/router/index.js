@@ -3,6 +3,7 @@ import Samples from "../views/Samples.vue";
 import Equipment from "../views/Equipment.vue";
 import StartingMaterials from "../views/StartingMaterials.vue";
 import Collections from "@/views/Collections.vue";
+import Tags from "@/views/Tags.vue";
 import NotFound from "../views/NotFound.vue";
 import EditPage from "../views/EditPage.vue";
 import CollectionPage from "../views/CollectionPage.vue";
@@ -72,6 +73,11 @@ const routes = [
     path: "/collections",
     name: "collections",
     component: Collections,
+  },
+  {
+    path: "/tags",
+    name: "tags",
+    component: Tags,
   },
   {
     path: "/collections/:id",

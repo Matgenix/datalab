@@ -44,6 +44,11 @@
           </div>
         </div>
         <div class="form-row">
+          <div class="form-group col-12 pb-3">
+            <ToggleableTagsFormGroup v-model="Tags" />
+          </div>
+        </div>
+        <div class="form-row">
           <div class="form-group col-sm-4 pr-2">
             <label for="cell-format-dropdown">Cell format</label>
             <select id="cell-format-dropdown" v-model="CellFormat" class="form-control">
@@ -126,6 +131,7 @@ import ToggleableCollectionFormGroup from "@/components/ToggleableCollectionForm
 import ToggleableCreatorsFormGroup from "@/components/ToggleableCreatorsFormGroup";
 import ToggleableItemStatusFormGroup from "@/components/ToggleableItemStatusFormGroup";
 import ToggleableGroupsFormGroup from "@/components/ToggleableGroupsFormGroup";
+import ToggleableTagsFormGroup from "@/components/ToggleableTagsFormGroup";
 import { cellFormats } from "@/resources.js";
 
 export default {
@@ -140,6 +146,7 @@ export default {
     ToggleableCreatorsFormGroup,
     ToggleableItemStatusFormGroup,
     ToggleableGroupsFormGroup,
+    ToggleableTagsFormGroup,
   },
   props: {
     item_id: {
@@ -174,6 +181,7 @@ export default {
     CellFormatDescription: createComputedSetterForItemField("cell_format_description"),
     CharacteristicMass: createComputedSetterForItemField("characteristic_mass"),
     Collections: createComputedSetterForItemField("collections"),
+    Tags: createComputedSetterForItemField("tags"),
     Status: createComputedSetterForItemField("status"),
     schema() {
       return this.$store.state.schemas[this.item?.type];
