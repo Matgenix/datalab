@@ -205,3 +205,48 @@ There are [pytest fixtures](https://docs.pytest.org/en/7.1.x/how-to/fixtures.htm
 test clients for unauthenticated, unauthorized, normal user and admin user
 access.
 As many authorisation cases should be tested as possible.
+
+## Docker development environment
+
+A hot-reloading *datalab* stack (API + web app + MongoDB); only
+[Docker](https://docs.docker.com/engine/install/) is required.
+
+```bash
+cp pydatalab/.env.example pydatalab/.env    # then fill in the OAuth values (see below)
+cp webapp/.env.example webapp/.env          # optional customisations
+docker compose --profile dev up --build     # first run builds; later just `up`
+```
+
+- Web app: http://localhost:8081
+- API: http://localhost:5001
+- Database: `mongodb://localhost:27018`
+
+Edits to `pydatalab/` and `webapp/` hot-reload; `.env` changes need a restart
+(`docker compose --profile dev restart api-dev` or `app-dev`). To log in to the
+web app, fill in the GitHub/Microsoft/Google OAuth block in `pydatalab/.env`.
+
+### `pydatalab/.env.example`
+
+```bash
+--8<-- "pydatalab/.env.example"
+```
+
+### `webapp/.env.example`
+
+```bash
+--8<-- "webapp/.env.example"
+```
+
+### Notes
+
+- The `dev` and `prod` compose profiles share the same Dockerfiles; `dev` services
+  bind-mount your checkout and keep their data in Docker volumes, with MongoDB on
+  host port 27018 to avoid clashing with a native install. Don't run both profiles
+  at once — they share ports 5001/8081.
+- The `dev` profile injects `PYDATALAB_MONGO_URI` into the API container (it must
+  point at the `database-dev` service), so setting it in `pydatalab/.env` only
+  affects native runs. To use a different database name in Docker, run
+  `export DATALAB_DB_NAME=my_project` before `docker compose up`.
+- Backend tests run natively: from `pydatalab/`, `uv sync --all-extras --dev` once,
+  then `uv run pytest`. Webapp component tests can run inside the container:
+  `docker compose exec app-dev /node_modules/.bin/cypress run --component`.
