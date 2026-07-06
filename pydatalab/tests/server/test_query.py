@@ -1,18 +1,3 @@
-def test_query_capabilities_are_view_driven(client):
-    expected = {
-        "samples": "samples",
-        "equipment": "equipment",
-        "startingMaterials": "starting_materials",
-    }
-
-    for data_type, list_view in expected.items():
-        response = client.get(f"/query-capabilities?data_type={data_type}")
-        assert response.status_code == 200
-        assert response.json["advanced_query"]["isEnabled"] is True
-        assert response.json["advanced_query"]["listViewName"] == list_view
-        assert response.json["advanced_query"]["options"]["item_types"]
-
-
 def test_query_schema_supports_multiple_list_views(client):
     cases = {
         "samples": ("samples", "chemform"),

@@ -876,8 +876,8 @@ def run_query():
     # determine model map and selected types
     if view.get("model_by_type"):
         model_map = view["model_by_type"]
-        item_types = body.get("item_types")
-        if not item_types or not isinstance(item_types, list):
+        item_types = body.get("item_types") or view.get("types", [])
+        if not item_types:
             return _error(400, "MISSING_PARAM", "item_types must be a non-empty array")
         for t in item_types:
             if t not in model_map:
