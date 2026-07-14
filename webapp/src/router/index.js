@@ -3,6 +3,7 @@ import Samples from "../views/Samples.vue";
 import Equipment from "../views/Equipment.vue";
 import StartingMaterials from "../views/StartingMaterials.vue";
 import Collections from "@/views/Collections.vue";
+import Tags from "@/views/Tags.vue";
 import NotFound from "../views/NotFound.vue";
 import EditPage from "../views/EditPage.vue";
 import CollectionPage from "../views/CollectionPage.vue";
@@ -12,7 +13,7 @@ import Admin from "@/views/Admin.vue";
 import Login from "../views/Login.vue";
 import Login2 from "../views/Login2.vue";
 import Login3 from "../views/Login3.vue";
-import { API_URL } from "@/resources.js";
+import { API_URL, ENABLE_TAGS } from "@/resources.js";
 
 const routes = [
   {
@@ -72,6 +73,19 @@ const routes = [
     path: "/collections",
     name: "collections",
     component: Collections,
+  },
+  {
+    path: "/tags",
+    name: "tags",
+    component: Tags,
+    // Only reachable when the tags feature is enabled at build time.
+    beforeEnter: (to, from, next) => {
+      if (ENABLE_TAGS) {
+        next();
+      } else {
+        next({ path: "/" });
+      }
+    },
   },
   {
     path: "/collections/:id",
