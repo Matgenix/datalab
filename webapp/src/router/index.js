@@ -13,7 +13,9 @@ import Admin from "@/views/Admin.vue";
 import Login from "../views/Login.vue";
 import Login2 from "../views/Login2.vue";
 import Login3 from "../views/Login3.vue";
-import { API_URL, ENABLE_TAGS } from "@/resources.js";
+import { API_URL } from "@/resources.js";
+import { getInfo } from "@/server_fetch_utils.js";
+import store from "@/store/index.js";
 
 const routes = [
   {
@@ -78,9 +80,10 @@ const routes = [
     path: "/tags",
     name: "tags",
     component: Tags,
-    // Only reachable when the tags feature is enabled at build time.
-    beforeEnter: (to, from, next) => {
-      if (ENABLE_TAGS) {
+    // Only reachable when the backend reports the tags feature as enabled.
+    beforeEnter: async (to, from, next) => {
+      const serverInfo = store.state.serverInfo ?? (await getInfo());
+      if (serverInfo.features?.tags) {
         next();
       } else {
         next({ path: "/" });

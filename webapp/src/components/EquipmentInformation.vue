@@ -100,7 +100,6 @@ import ToggleableCreatorsFormGroup from "@/components/ToggleableCreatorsFormGrou
 import ToggleableItemStatusFormGroup from "@/components/ToggleableItemStatusFormGroup";
 import ToggleableGroupsFormGroup from "@/components/ToggleableGroupsFormGroup";
 import ToggleableTagsFormGroup from "@/components/ToggleableTagsFormGroup";
-import { ENABLE_TAGS } from "@/resources.js";
 
 export default {
   components: {
@@ -144,7 +143,7 @@ export default {
     Contact: createComputedSetterForItemField("contact"),
     Status: createComputedSetterForItemField("status"),
     enableTags() {
-      return ENABLE_TAGS;
+      return this.$store.state.serverInfo?.features?.tags ?? false;
     },
     schema() {
       return this.$store.state.schemas[this.item?.type];
