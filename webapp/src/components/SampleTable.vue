@@ -1,29 +1,23 @@
+<!-- This file was edited with the assistance of an AI model and requires human review from the contributor. -->
 <template>
   <DynamicDataTable
     :columns="sampleColumns"
     :data="samples"
     :data-type="'samples'"
-    :global-filter-fields="[
-      'item_id',
-      'name',
-      'refcode',
-      'chemform',
-      'creatorsList',
-      'blocks',
-      'characteristic_chemical_formula',
-    ]"
+    :global-filter-fields="sampleGlobalFilterFields"
   />
 </template>
 
 <script>
 import DynamicDataTable from "@/components/DynamicDataTable";
+import { ENABLE_TAGS } from "@/resources.js";
 import { getSampleList } from "@/server_fetch_utils.js";
 
 export default {
   components: { DynamicDataTable },
   data() {
     return {
-      sampleColumns: [
+      baseSampleColumns: [
         {
           field: "item_id",
           header: "ID",
@@ -74,6 +68,38 @@ export default {
     };
   },
   computed: {
+    enableTags() {
+      return ENABLE_TAGS;
+    },
+    sampleColumns() {
+      const columns = [...this.baseSampleColumns];
+      if (this.enableTags) {
+        const insertBeforeBlocks = columns.findIndex((column) => column.field === "blocks");
+        columns.splice(insertBeforeBlocks, 0, {
+          field: "tags",
+          header: "Tags",
+          body: "TagListCell",
+          filter: true,
+          label: "Tags",
+        });
+      }
+      return columns;
+    },
+    sampleGlobalFilterFields() {
+      const fields = [
+        "item_id",
+        "name",
+        "refcode",
+        "chemform",
+        "creatorsList",
+        "blocks",
+        "characteristic_chemical_formula",
+      ];
+      if (this.enableTags) {
+        fields.push("tagsList");
+      }
+      return fields;
+    },
     samples() {
       if (!this.$store.state.sample_list) {
         return null;
@@ -85,10 +111,14 @@ export default {
             ...(sample.creators || []).map((c) => ({ ...c, type: "creator" })),
             ...(sample.groups || []).map((g) => ({ ...g, type: "group" })),
           ],
-          collectionsList: sample.collections
+          collectionsList: (sample.collections || [])
             .map((collection) => collection.collection_id)
             .join(", "),
-          creatorsList: sample.creators.map((creator) => creator.display_name).join(", "),
+          creatorsList: (sample.creators || []).map((creator) => creator.display_name).join(", "),
+          tagsList: (sample.tags || [])
+            .map((tag) => (typeof tag === "string" ? tag : tag.name))
+            .filter(Boolean)
+            .join(", "),
         };
       });
     },

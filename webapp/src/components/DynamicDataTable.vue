@@ -1,3 +1,4 @@
+<!-- This file was edited with the assistance of an AI model and requires human review from the contributor. -->
 <template>
   <div>
     <div v-if="isSampleFetchError" class="alert alert-danger">
@@ -207,6 +208,39 @@
                     class="inline-flex items-center"
                   >
                     <FormattedCollectionName :collection_id="option.collection_id" :size="20" />
+                  </span>
+                </template>
+                <span v-else class="text-gray-400">Any</span>
+              </div>
+            </template>
+          </MultiSelect>
+        </template>
+
+        <template v-else-if="column.filter && column.field === 'tags'" #filter="">
+          <MultiSelect
+            v-model="filters[column.field].constraints[0].value"
+            :options="uniqueTags"
+            option-label="name"
+            placeholder="Any"
+            class="d-flex w-full"
+            :filter="true"
+            data-testid="tags-filter"
+            @click.stop
+          >
+            <template #option="slotProps">
+              <div class="flex items-center">
+                <TagBadge :tag="slotProps.option.value" />
+              </div>
+            </template>
+            <template #value="slotProps">
+              <div class="flex flex-wrap gap-1 items-center">
+                <template v-if="slotProps.value && slotProps.value.length">
+                  <span
+                    v-for="option in slotProps.value"
+                    :key="option.key"
+                    class="inline-flex items-center"
+                  >
+                    <TagBadge :tag="option.value" />
                   </span>
                 </template>
                 <span v-else class="text-gray-400">Any</span>
@@ -611,6 +645,7 @@ import GroupActionsCell from "@/components/GroupActionsCell.vue";
 
 import TagBadge from "@/components/TagBadge.vue";
 import TagActionsCell from "@/components/TagActionsCell.vue";
+import TagListCell from "@/components/TagListCell.vue";
 
 import { FilterMatchMode, FilterOperator, FilterService } from "@primevue/core/api";
 import DataTable from "primevue/datatable";
@@ -663,6 +698,7 @@ export default {
     GroupActionsCell,
     TagBadge,
     TagActionsCell,
+    TagListCell,
   },
   props: {
     columns: {
@@ -755,6 +791,10 @@ export default {
         blocks: {
           operator: FilterOperator.AND,
           constraints: [{ value: null, matchMode: "exactBlockMatch" }],
+        },
+        tags: {
+          operator: FilterOperator.AND,
+          constraints: [{ value: null, matchMode: "exactTagMatch" }],
         },
         status: {
           operator: FilterOperator.OR,
@@ -901,6 +941,25 @@ export default {
       blockTypesMap.set("__no_blocks__", { blocktype: "__no_blocks__", label: "No blocks" });
 
       return Array.from(blockTypesMap.values());
+    },
+    uniqueTags() {
+      if (!this.data) return [];
+
+      const tagsMap = new Map();
+      this.data
+        .flatMap((item) => item.tags || [])
+        .forEach((tag) => {
+          const key = this.tagFilterKey(tag);
+          if (key && !tagsMap.has(key)) {
+            tagsMap.set(key, {
+              key,
+              name: this.tagFilterLabel(tag),
+              value: tag,
+            });
+          }
+        });
+
+      return Array.from(tagsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     },
     uniqueStringValues() {
       const fields = ["location", "supplier"];
@@ -1145,6 +1204,27 @@ export default {
       }
 
       return value.some((itemBlock) => itemBlock.blocktype === filterValue.blocktype);
+    });
+    FilterService.register("exactTagMatch", (value, filterValue) => {
+      if (
+        filterValue === null ||
+        filterValue === undefined ||
+        (Array.isArray(filterValue) && filterValue.length === 0)
+      ) {
+        return true;
+      }
+
+      if (!value || !Array.isArray(value)) {
+        return false;
+      }
+
+      const selectedTags = Array.isArray(filterValue) ? filterValue : [filterValue];
+      const filter = this.filters.tags;
+      const isAnd = filter && filter.operator === FilterOperator.AND;
+      const matchesSelectedTag = (selectedTag) =>
+        value.some((itemTag) => this.tagsMatch(itemTag, selectedTag.value || selectedTag));
+
+      return isAnd ? selectedTags.every(matchesSelectedTag) : selectedTags.some(matchesSelectedTag);
     });
 
     const exactStringMatch = (value, filterValue) => {
@@ -1431,6 +1511,9 @@ export default {
         TagActionsCell: {
           tag: data,
         },
+        TagListCell: {
+          tags: "tags",
+        },
       };
 
       const config = propsConfig[componentName] || {};
@@ -1470,6 +1553,29 @@ export default {
       }
 
       return props;
+    },
+    tagFilterKey(tag) {
+      if (typeof tag === "string") {
+        return `free-text-${tag}`;
+      }
+      if (tag?.immutable_id) {
+        return `managed-${tag.immutable_id}`;
+      }
+      if (tag?.name) {
+        return `managed-name-${tag.name}`;
+      }
+      return null;
+    },
+    tagFilterLabel(tag) {
+      return typeof tag === "string" ? tag : tag?.name || "";
+    },
+    tagsMatch(itemTag, selectedTag) {
+      const itemKey = this.tagFilterKey(itemTag);
+      const selectedKey = this.tagFilterKey(selectedTag);
+      if (itemKey && selectedKey) {
+        return itemKey === selectedKey;
+      }
+      return this.tagFilterLabel(itemTag) === this.tagFilterLabel(selectedTag);
     },
     isFilterActive(field) {
       const filter = this.filters[field];
@@ -1568,6 +1674,7 @@ export default {
       const customState = {
         columnWidths: state.columnWidths,
         visibleColumns: this.selectedColumns.map((col) => col.field),
+        availableColumnFields: this.availableColumns.map((col) => col.field),
         first: state.first,
         rows: state.rows,
       };
@@ -1593,9 +1700,21 @@ export default {
           }
 
           if (customState.visibleColumns && Array.isArray(customState.visibleColumns)) {
-            this.selectedColumns = this.availableColumns.filter((col) =>
+            const restoredColumns = this.availableColumns.filter((col) =>
               customState.visibleColumns.includes(col.field),
             );
+            const savedAvailableFields = new Set(customState.availableColumnFields || []);
+            const newlyAvailableColumns = this.availableColumns.filter((col) => {
+              if (col.hidden || customState.visibleColumns.includes(col.field)) {
+                return false;
+              }
+              if (!customState.availableColumnFields) {
+                return col.field === "tags";
+              }
+              return !savedAvailableFields.has(col.field);
+            });
+
+            this.selectedColumns = [...restoredColumns, ...newlyAvailableColumns];
 
             if (this.selectedColumns.length === 0) {
               this.selectedColumns = this.availableColumns.filter((col) => !col.hidden);
