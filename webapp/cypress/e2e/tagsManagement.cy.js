@@ -1,5 +1,5 @@
 // E2e tests for the tag management page (/tags). Needs the dev server + API (:5001) running
-// with testing auth AND the tags feature enabled (VUE_APP_ENABLE_TAGS + PYDATALAB_ENABLE_TAGS).
+// with testing auth AND the tags feature enabled (PYDATALAB_ENABLE_TAGS).
 // Managed tags are global and admin-only; admin-user@example.com is an admin by the same
 // convention as authenticatedSampleTests.cy.js.
 

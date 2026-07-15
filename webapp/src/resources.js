@@ -45,10 +45,6 @@ const automatically_generate_id_default =
 export const AUTOMATICALLY_GENERATE_ID_DEFAULT =
   automatically_generate_id_default.toLowerCase() == "true";
 
-// Opt-in feature flag for the (experimental) item tags feature. Disabled by default.
-const enable_tags = process.env.VUE_APP_ENABLE_TAGS || "false";
-export const ENABLE_TAGS = enable_tags.toLowerCase() == "true";
-
 // Eventually this should be pulled from the schema
 export const DATETIME_FIELDS = new Set(["date"]);
 

@@ -132,7 +132,7 @@ import ToggleableCreatorsFormGroup from "@/components/ToggleableCreatorsFormGrou
 import ToggleableItemStatusFormGroup from "@/components/ToggleableItemStatusFormGroup";
 import ToggleableGroupsFormGroup from "@/components/ToggleableGroupsFormGroup";
 import ToggleableTagsFormGroup from "@/components/ToggleableTagsFormGroup";
-import { cellFormats, ENABLE_TAGS } from "@/resources.js";
+import { cellFormats } from "@/resources.js";
 
 export default {
   components: {
@@ -184,7 +184,7 @@ export default {
     Tags: createComputedSetterForItemField("tags"),
     Status: createComputedSetterForItemField("status"),
     enableTags() {
-      return ENABLE_TAGS;
+      return this.$store.state.serverInfo?.features?.tags ?? false;
     },
     schema() {
       return this.$store.state.schemas[this.item?.type];

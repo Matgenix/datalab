@@ -139,7 +139,7 @@ import ToggleableTagsFormGroup from "@/components/ToggleableTagsFormGroup";
 
 import AutoComplete from "primevue/autocomplete";
 import { getStartingMaterialList, getEquipmentList } from "@/server_fetch_utils.js";
-import { EDITABLE_INVENTORY, ENABLE_TAGS } from "@/resources.js";
+import { EDITABLE_INVENTORY } from "@/resources.js";
 
 export default {
   components: {
@@ -192,7 +192,7 @@ export default {
     ItemCreators: createComputedSetterForItemField("creators"),
     ItemGroups: createComputedSetterForItemField("groups"),
     enableTags() {
-      return ENABLE_TAGS;
+      return this.$store.state.serverInfo?.features?.tags ?? false;
     },
     schema() {
       return this.$store.state.schemas[this.item?.type];

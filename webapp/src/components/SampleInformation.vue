@@ -85,7 +85,6 @@ import SynthesisInformation from "@/components/SynthesisInformation";
 import SubstanceInformation from "@/components/SubstanceInformation";
 import TableOfContents from "@/components/TableOfContents";
 import ItemRelationshipVisualization from "@/components/ItemRelationshipVisualization";
-import { ENABLE_TAGS } from "@/resources.js";
 
 export default {
   components: {
@@ -133,7 +132,7 @@ export default {
     Tags: createComputedSetterForItemField("tags"),
     Status: createComputedSetterForItemField("status"),
     enableTags() {
-      return ENABLE_TAGS;
+      return this.$store.state.serverInfo?.features?.tags ?? false;
     },
     schema() {
       return this.$store.state.schemas[this.item?.type];
