@@ -78,7 +78,7 @@ export default {
         columns.splice(insertBeforeBlocks, 0, {
           field: "tags",
           header: "Tags",
-          body: "TagListCell",
+          body: "TagList",
           filter: true,
           label: "Tags",
         });
@@ -111,10 +111,10 @@ export default {
             ...(sample.creators || []).map((c) => ({ ...c, type: "creator" })),
             ...(sample.groups || []).map((g) => ({ ...g, type: "group" })),
           ],
-          collectionsList: (sample.collections || [])
+          collectionsList: sample.collections
             .map((collection) => collection.collection_id)
             .join(", "),
-          creatorsList: (sample.creators || []).map((creator) => creator.display_name).join(", "),
+          creatorsList: sample.creators.map((creator) => creator.display_name).join(", "),
           tagsList: (sample.tags || [])
             .map((tag) => (typeof tag === "string" ? tag : tag.name))
             .filter(Boolean)

@@ -222,28 +222,27 @@
             :options="uniqueTags"
             option-label="name"
             placeholder="Any"
-            class="d-flex w-full"
+            class="d-flex w-100"
             :filter="true"
-            data-testid="tags-filter"
             @click.stop
           >
             <template #option="slotProps">
-              <div class="flex items-center">
+              <div class="d-flex align-items-center">
                 <TagBadge :tag="slotProps.option.value" />
               </div>
             </template>
             <template #value="slotProps">
-              <div class="flex flex-wrap gap-1 items-center">
+              <div class="d-flex flex-wrap align-items-center">
                 <template v-if="slotProps.value && slotProps.value.length">
                   <span
                     v-for="option in slotProps.value"
                     :key="option.key"
-                    class="inline-flex items-center"
+                    class="d-inline-flex align-items-center mr-1"
                   >
                     <TagBadge :tag="option.value" />
                   </span>
                 </template>
-                <span v-else class="text-gray-400">Any</span>
+                <span v-else class="text-muted">Any</span>
               </div>
             </template>
           </MultiSelect>
@@ -645,7 +644,7 @@ import GroupActionsCell from "@/components/GroupActionsCell.vue";
 
 import TagBadge from "@/components/TagBadge.vue";
 import TagActionsCell from "@/components/TagActionsCell.vue";
-import TagListCell from "@/components/TagListCell.vue";
+import TagList from "@/components/TagList.vue";
 
 import { FilterMatchMode, FilterOperator, FilterService } from "@primevue/core/api";
 import DataTable from "primevue/datatable";
@@ -698,7 +697,7 @@ export default {
     GroupActionsCell,
     TagBadge,
     TagActionsCell,
-    TagListCell,
+    TagList,
   },
   props: {
     columns: {
@@ -1511,7 +1510,7 @@ export default {
         TagActionsCell: {
           tag: data,
         },
-        TagListCell: {
+        TagList: {
           tags: "tags",
         },
       };
@@ -1700,21 +1699,13 @@ export default {
           }
 
           if (customState.visibleColumns && Array.isArray(customState.visibleColumns)) {
-            const restoredColumns = this.availableColumns.filter((col) =>
-              customState.visibleColumns.includes(col.field),
-            );
+            const visibleColumnFields = new Set(customState.visibleColumns);
             const savedAvailableFields = new Set(customState.availableColumnFields || []);
-            const newlyAvailableColumns = this.availableColumns.filter((col) => {
-              if (col.hidden || customState.visibleColumns.includes(col.field)) {
-                return false;
-              }
-              if (!customState.availableColumnFields) {
-                return col.field === "tags";
-              }
-              return !savedAvailableFields.has(col.field);
-            });
-
-            this.selectedColumns = [...restoredColumns, ...newlyAvailableColumns];
+            this.selectedColumns = this.availableColumns.filter(
+              (col) =>
+                visibleColumnFields.has(col.field) ||
+                (col.field === "tags" && !col.hidden && !savedAvailableFields.has(col.field)),
+            );
 
             if (this.selectedColumns.length === 0) {
               this.selectedColumns = this.availableColumns.filter((col) => !col.hidden);
