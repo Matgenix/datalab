@@ -1511,6 +1511,7 @@ export default {
         },
         TagList: {
           tags: "tags",
+          maxVisible: { value: 2 },
         },
       };
 
