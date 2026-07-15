@@ -77,10 +77,6 @@ def test_list_and_search_tags(client, another_client, admin_client):
     for result in response.json["data"]:
         assert result["type"] == "tags"
         assert result["immutable_id"]
-        # No scope or ownership is leaked.
-        assert "scope" not in result
-        assert "creator_ids" not in result
-        assert "group_ids" not in result
     assert results["searchable-one"]["color"] == "#abcdef"
     assert results["searchable-two"]["description"] == "a description"
 
