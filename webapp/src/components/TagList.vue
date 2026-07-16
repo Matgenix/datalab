@@ -1,4 +1,3 @@
-<!-- This file was edited with the assistance of an AI model and requires human review from the contributor. -->
 <template>
   <div class="tag-list d-flex flex-wrap align-items-center">
     <TagBadge v-for="(tag, index) in visibleTags" :key="tagKey(tag, index)" :tag="tag" />
