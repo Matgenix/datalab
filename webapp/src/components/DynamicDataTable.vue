@@ -218,12 +218,17 @@
         <template v-else-if="column.filter && column.field === 'tags'" #filter="">
           <MultiSelect
             v-model="filters[column.field].constraints[0].value"
-            :options="uniqueTags"
+            :options="tagFilterOptions"
             option-label="name"
             placeholder="Any"
             class="d-flex w-100"
             :filter="true"
+            filter-placeholder="Search all tags"
+            :reset-filter-on-hide="true"
+            :virtual-scroller-options="{ itemSize: 38 }"
             @click.stop
+            @filter="isTagFilterSearching = Boolean($event.value.trim())"
+            @hide="resetTagFilterMenu"
           >
             <template #option="slotProps">
               <div class="d-flex align-items-center">
@@ -243,6 +248,18 @@
                 </template>
                 <span v-else class="text-muted">Any</span>
               </div>
+            </template>
+            <template #footer>
+              <button
+                v-if="freeTextTagCount && !isTagFilterSearching"
+                type="button"
+                class="btn btn-link btn-sm text-left text-wrap w-100"
+                :aria-pressed="showFreeTextTags"
+                @click.stop="showFreeTextTags = !showFreeTextTags"
+              >
+                <span v-if="showFreeTextTags">Hide free-text tags</span>
+                <span v-else>Show free-text tags ({{ freeTextTagCount }})</span>
+              </button>
             </template>
           </MultiSelect>
         </template>
@@ -860,6 +877,8 @@ export default {
         { label: "Created before", value: "before" },
         { label: "Created after", value: "after" },
       ],
+      isTagFilterSearching: false,
+      showFreeTextTags: false,
     };
   },
 
@@ -957,7 +976,20 @@ export default {
           }
         });
 
-      return Array.from(tagsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      return Array.from(tagsMap.values()).sort((a, b) => {
+        if (this.isManagedTag(a.value) !== this.isManagedTag(b.value)) {
+          return this.isManagedTag(a.value) ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+    },
+    freeTextTagCount() {
+      return this.uniqueTags.filter((option) => !this.isManagedTag(option.value)).length;
+    },
+    tagFilterOptions() {
+      return this.isTagFilterSearching || this.showFreeTextTags
+        ? this.uniqueTags
+        : this.uniqueTags.filter((option) => this.isManagedTag(option.value));
     },
     uniqueStringValues() {
       const fields = ["location", "supplier"];
@@ -1568,6 +1600,9 @@ export default {
     tagFilterLabel(tag) {
       return typeof tag === "string" ? tag : tag?.name || "";
     },
+    isManagedTag(tag) {
+      return typeof tag !== "string" && Boolean(tag?.immutable_id);
+    },
     tagsMatch(itemTag, selectedTag) {
       const itemKey = this.tagFilterKey(itemTag);
       const selectedKey = this.tagFilterKey(selectedTag);
@@ -1575,6 +1610,10 @@ export default {
         return itemKey === selectedKey;
       }
       return this.tagFilterLabel(itemTag) === this.tagFilterLabel(selectedTag);
+    },
+    resetTagFilterMenu() {
+      this.isTagFilterSearching = false;
+      this.showFreeTextTags = false;
     },
     isFilterActive(field) {
       const filter = this.filters[field];
