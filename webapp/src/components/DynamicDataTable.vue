@@ -54,6 +54,7 @@
           @open-qr-scanner-modal="qrScannerModalIsOpen = true"
           @open-create-collection-modal="createCollectionModalIsOpen = true"
           @open-create-equipment-modal="createEquipmentModalIsOpen = true"
+          @open-create-tag-modal="$emit('open-create-tag-modal')"
           @open-add-to-collection-modal="addToCollectionModalIsOpen = true"
           @open-batch-share-modal="batchShareModalIsOpen = true"
           @delete-selected-items="deleteSelectedItems"
@@ -119,6 +120,7 @@
             v-bind="getComponentProps(column.body, slotProps.data)"
             @edit-group="$emit('edit-group', $event)"
             @group-deleted="$emit('group-deleted')"
+            @edit-tag="$emit('edit-tag', $event)"
           />
         </template>
         <template
@@ -209,6 +211,55 @@
                 </template>
                 <span v-else class="text-gray-400">Any</span>
               </div>
+            </template>
+          </MultiSelect>
+        </template>
+
+        <template v-else-if="column.filter && column.field === 'tags'" #filter="">
+          <MultiSelect
+            v-model="filters[column.field].constraints[0].value"
+            :options="tagFilterOptions"
+            option-label="name"
+            placeholder="Any"
+            class="d-flex w-100"
+            :filter="true"
+            filter-placeholder="Search all tags"
+            :reset-filter-on-hide="true"
+            :virtual-scroller-options="{ itemSize: 38 }"
+            @click.stop
+            @filter="isTagFilterSearching = Boolean($event.value.trim())"
+            @hide="resetTagFilterMenu"
+          >
+            <template #option="slotProps">
+              <div class="d-flex align-items-center">
+                <TagBadge :tag="slotProps.option.value" />
+              </div>
+            </template>
+            <template #value="slotProps">
+              <div class="d-flex flex-wrap align-items-center">
+                <template v-if="slotProps.value && slotProps.value.length">
+                  <span
+                    v-for="option in slotProps.value"
+                    :key="option.key"
+                    class="d-inline-flex align-items-center mr-1"
+                  >
+                    <TagBadge :tag="option.value" />
+                  </span>
+                </template>
+                <span v-else class="text-muted">Any</span>
+              </div>
+            </template>
+            <template #footer>
+              <button
+                v-if="freeTextTagCount && !isTagFilterSearching"
+                type="button"
+                class="btn btn-link btn-sm text-left text-wrap w-100"
+                :aria-pressed="showFreeTextTags"
+                @click.stop="showFreeTextTags = !showFreeTextTags"
+              >
+                <span v-if="showFreeTextTags">Hide free-text tags</span>
+                <span v-else>Show free-text tags ({{ freeTextTagCount }})</span>
+              </button>
             </template>
           </MultiSelect>
         </template>
@@ -607,6 +658,10 @@ import GroupIdCell from "@/components/GroupIdCell.vue";
 import GroupMembersCell from "@/components/GroupMembersCell.vue";
 import GroupActionsCell from "@/components/GroupActionsCell.vue";
 
+import TagBadge from "@/components/TagBadge.vue";
+import TagActionsCell from "@/components/TagActionsCell.vue";
+import TagList from "@/components/TagList.vue";
+
 import { FilterMatchMode, FilterOperator, FilterService } from "@primevue/core/api";
 import DataTable from "primevue/datatable";
 import MultiSelect from "primevue/multiselect";
@@ -656,6 +711,9 @@ export default {
     GroupIdCell,
     GroupMembersCell,
     GroupActionsCell,
+    TagBadge,
+    TagActionsCell,
+    TagList,
   },
   props: {
     columns: {
@@ -696,6 +754,8 @@ export default {
     "edit-group",
     "group-deleted",
     "groups-data-changed",
+    "open-create-tag-modal",
+    "edit-tag",
   ],
   data() {
     return {
@@ -746,6 +806,10 @@ export default {
         blocks: {
           operator: FilterOperator.AND,
           constraints: [{ value: null, matchMode: "exactBlockMatch" }],
+        },
+        tags: {
+          operator: FilterOperator.AND,
+          constraints: [{ value: null, matchMode: "exactTagMatch" }],
         },
         status: {
           operator: FilterOperator.OR,
@@ -799,6 +863,10 @@ export default {
           operator: FilterOperator.AND,
           constraints: [{ value: null, matchMode: FilterMatchMode.CONTAINS }],
         },
+        name: {
+          operator: FilterOperator.AND,
+          constraints: [{ value: null, matchMode: FilterMatchMode.CONTAINS }],
+        },
       },
       filteredData: [],
       allowedTypes: INVENTORY_TABLE_TYPES,
@@ -809,6 +877,8 @@ export default {
         { label: "Created before", value: "before" },
         { label: "Created after", value: "after" },
       ],
+      isTagFilterSearching: false,
+      showFreeTextTags: false,
     };
   },
 
@@ -889,6 +959,38 @@ export default {
 
       return Array.from(blockTypesMap.values());
     },
+    uniqueTags() {
+      if (!this.data) return [];
+
+      const tagsMap = new Map();
+      this.data
+        .flatMap((item) => item.tags || [])
+        .forEach((tag) => {
+          const key = this.tagFilterKey(tag);
+          if (key && !tagsMap.has(key)) {
+            tagsMap.set(key, {
+              key,
+              name: this.tagFilterLabel(tag),
+              value: tag,
+            });
+          }
+        });
+
+      return Array.from(tagsMap.values()).sort((a, b) => {
+        if (this.isManagedTag(a.value) !== this.isManagedTag(b.value)) {
+          return this.isManagedTag(a.value) ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+    },
+    freeTextTagCount() {
+      return this.uniqueTags.filter((option) => !this.isManagedTag(option.value)).length;
+    },
+    tagFilterOptions() {
+      return this.isTagFilterSearching || this.showFreeTextTags
+        ? this.uniqueTags
+        : this.uniqueTags.filter((option) => this.isManagedTag(option.value));
+    },
     uniqueStringValues() {
       const fields = ["location", "supplier"];
       return Object.fromEntries(
@@ -958,6 +1060,7 @@ export default {
         collections: "collection-table",
         startingMaterials: "starting_materials-table",
         equipment: "equipment-table",
+        tags: "tags-table",
       };
       return dataTestIdMap[this.dataType] || "default-table";
     },
@@ -1132,6 +1235,27 @@ export default {
 
       return value.some((itemBlock) => itemBlock.blocktype === filterValue.blocktype);
     });
+    FilterService.register("exactTagMatch", (value, filterValue) => {
+      if (
+        filterValue === null ||
+        filterValue === undefined ||
+        (Array.isArray(filterValue) && filterValue.length === 0)
+      ) {
+        return true;
+      }
+
+      if (!value || !Array.isArray(value)) {
+        return false;
+      }
+
+      const selectedTags = Array.isArray(filterValue) ? filterValue : [filterValue];
+      const filter = this.filters.tags;
+      const isAnd = filter && filter.operator === FilterOperator.AND;
+      const matchesSelectedTag = (selectedTag) =>
+        value.some((itemTag) => this.tagsMatch(itemTag, selectedTag.value || selectedTag));
+
+      return isAnd ? selectedTags.every(matchesSelectedTag) : selectedTags.some(matchesSelectedTag);
+    });
 
     const exactStringMatch = (value, filterValue) => {
       if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) {
@@ -1278,7 +1402,7 @@ export default {
       });
     },
     goToEditPage(event) {
-      if (this.dataType === "users" || this.dataType === "groups") {
+      if (this.dataType === "users" || this.dataType === "groups" || this.dataType === "tags") {
         return;
       }
       const row = event.data;
@@ -1411,6 +1535,16 @@ export default {
           group: data,
           allGroups: data.allGroups || [],
         },
+        TagBadge: {
+          tag: data,
+        },
+        TagActionsCell: {
+          tag: data,
+        },
+        TagList: {
+          tags: "tags",
+          maxVisible: { value: 2 },
+        },
       };
 
       const config = propsConfig[componentName] || {};
@@ -1450,6 +1584,36 @@ export default {
       }
 
       return props;
+    },
+    tagFilterKey(tag) {
+      if (typeof tag === "string") {
+        return `free-text-${tag}`;
+      }
+      if (tag?.immutable_id) {
+        return `managed-${tag.immutable_id}`;
+      }
+      if (tag?.name) {
+        return `managed-name-${tag.name}`;
+      }
+      return null;
+    },
+    tagFilterLabel(tag) {
+      return typeof tag === "string" ? tag : tag?.name || "";
+    },
+    isManagedTag(tag) {
+      return typeof tag !== "string" && Boolean(tag?.immutable_id);
+    },
+    tagsMatch(itemTag, selectedTag) {
+      const itemKey = this.tagFilterKey(itemTag);
+      const selectedKey = this.tagFilterKey(selectedTag);
+      if (itemKey && selectedKey) {
+        return itemKey === selectedKey;
+      }
+      return this.tagFilterLabel(itemTag) === this.tagFilterLabel(selectedTag);
+    },
+    resetTagFilterMenu() {
+      this.isTagFilterSearching = false;
+      this.showFreeTextTags = false;
     },
     isFilterActive(field) {
       const filter = this.filters[field];
@@ -1548,6 +1712,7 @@ export default {
       const customState = {
         columnWidths: state.columnWidths,
         visibleColumns: this.selectedColumns.map((col) => col.field),
+        availableColumnFields: this.availableColumns.map((col) => col.field),
         first: state.first,
         rows: state.rows,
       };
@@ -1573,8 +1738,12 @@ export default {
           }
 
           if (customState.visibleColumns && Array.isArray(customState.visibleColumns)) {
-            this.selectedColumns = this.availableColumns.filter((col) =>
-              customState.visibleColumns.includes(col.field),
+            const visibleColumnFields = new Set(customState.visibleColumns);
+            const savedAvailableFields = new Set(customState.availableColumnFields || []);
+            this.selectedColumns = this.availableColumns.filter(
+              (col) =>
+                visibleColumnFields.has(col.field) ||
+                (col.field === "tags" && !col.hidden && !savedAvailableFields.has(col.field)),
             );
 
             if (this.selectedColumns.length === 0) {

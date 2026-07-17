@@ -4,7 +4,13 @@ from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_val
 
 from pydatalab.models.blocks import DataBlockResponse
 from pydatalab.models.people import Group, Person
-from pydatalab.models.utils import BaseModel, Constituent, InlineSubstance, PyObjectId
+from pydatalab.models.utils import (
+    BaseModel,
+    Constituent,
+    EntryReference,
+    InlineSubstance,
+    PyObjectId,
+)
 
 __all__ = (
     "HasOwner",
@@ -13,6 +19,7 @@ __all__ = (
     "IsCollectable",
     "HasSynthesisInfo",
     "HasSubstanceInfo",
+    "HasTags",
 )
 
 
@@ -28,6 +35,76 @@ class HasOwner(BaseModel):
 
     groups: list[Group] | None = Field(None)
     """Inlined info for the groups with access to this item."""
+
+
+class HasTags(BaseModel):
+    """Trait mixin for models that can be annotated with tags.
+
+    Note: this mixin only provides the stored `tags` field and its coercion.
+    Inlining current tag names for display (and dropping references to deleted
+    tags) is a read-time concern handled by
+    `pydatalab.mongo.resolve_tags_for_docs`, which each entity's read path must
+    call explicitly on the docs it returns.
+    """
+
+    tags: list[EntryReference | str] = Field(default_factory=list)
+    """Tags applied to this entry: references to managed `tags` entries (by
+    `immutable_id`) and/or free-text strings."""
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def coerce_tags(cls, v):
+        """Coerce raw tag entries into references or strings, and de-duplicate.
+
+        - a plain string is kept as a free-text tag;
+        - a mapping carrying an `immutable_id` becomes an
+          `EntryReference` of type ``tags``;
+        - a mapping carrying only a `name` is treated as a free-text string.
+
+        References are de-duplicated by `immutable_id`, strings by value.
+        """
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            raise ValueError("`tags` must be a list")
+
+        coerced: list = []
+        seen_strings: set[str] = set()
+        seen_refs: set[PyObjectId | None] = set()
+
+        for tag in v:
+            if isinstance(tag, str):
+                name = tag.strip()
+                if name and name not in seen_strings:
+                    seen_strings.add(name)
+                    coerced.append(name)
+                continue
+
+            if isinstance(tag, EntryReference):
+                if tag.immutable_id not in seen_refs:
+                    seen_refs.add(tag.immutable_id)
+                    coerced.append(tag)
+                continue
+
+            if isinstance(tag, dict):
+                if tag.get("immutable_id") is not None:
+                    data = dict(tag)
+                    data.setdefault("type", "tags")
+                    ref = EntryReference(**data)
+                    if ref.immutable_id not in seen_refs:
+                        seen_refs.add(ref.immutable_id)
+                        coerced.append(ref)
+                    continue
+
+                name = (tag.get("name") or "").strip()
+                if name and name not in seen_strings:
+                    seen_strings.add(name)
+                    coerced.append(name)
+                continue
+
+            raise ValueError(f"Invalid tag entry: {tag!r}")
+
+        return coerced
 
 
 class HasRevisionControl(BaseModel):
