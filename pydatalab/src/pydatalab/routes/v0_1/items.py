@@ -15,6 +15,7 @@ from werkzeug.exceptions import BadRequest, Conflict, InternalServerError, NotFo
 
 from pydatalab.apps import BLOCK_TYPES
 from pydatalab.config import CONFIG
+from pydatalab.feature_flags import FEATURE_FLAGS
 from pydatalab.logger import LOGGER
 from pydatalab.models import ITEM_MODELS, ItemVersion
 from pydatalab.models.items import Item
@@ -279,6 +280,8 @@ def get_samples_summary(match: dict | None = None, project: dict | None = None) 
         "refcode": 1,
         "status": 1,
     }
+    if FEATURE_FLAGS.tags:
+        _project["tags"] = 1
 
     # Cannot mix 0 and 1 keys in MongoDB project so must loop and check
     if project:
@@ -288,7 +291,7 @@ def get_samples_summary(match: dict | None = None, project: dict | None = None) 
             else:
                 _project[key] = 1
 
-    return list(
+    samples = list(
         flask_mongo.db.items.aggregate(
             [
                 {"$match": match},
@@ -300,6 +303,10 @@ def get_samples_summary(match: dict | None = None, project: dict | None = None) 
             ]
         )
     )
+    if FEATURE_FLAGS.tags:
+        resolve_tags_for_docs(samples)
+
+    return samples
 
 
 def entry_reference_lookup(item_doc: dict) -> dict:
