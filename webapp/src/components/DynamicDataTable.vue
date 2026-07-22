@@ -9,7 +9,7 @@
       v-model:filters="filters"
       v-model:selection="itemsSelected"
       v-model:select-all="allSelected"
-      :value="data"
+      :value="advancedQueryResults !== null ? advancedQueryResults : data"
       :data-testid="computedDataTestId"
       selection-mode="checkbox"
       paginator
@@ -47,6 +47,7 @@
           :selected-columns="selectedColumns"
           :collection-id="collectionId"
           :all-users="allUsersForBulk"
+          :advanced-query-config="advancedQueryConfig"
           @update:filters="updateFilters"
           @update:selected-columns="onToggleColumns"
           @open-create-item-modal="createItemModalIsOpen = true"
@@ -62,6 +63,7 @@
           @users-data-changed="$emit('users-data-changed')"
           @bulk-invalidate-tokens="handleItemsUpdated"
           @bulk-delete-groups="$emit('groups-data-changed')"
+          @advanced-query-results="handleAdvancedQueryResults"
         />
       </template>
       <template #loading>
@@ -614,6 +616,7 @@ import Column from "primevue/column";
 import InputText from "primevue/inputtext";
 import DatePicker from "primevue/datepicker";
 import Select from "primevue/select";
+import { fetchAdvancedQueryConfig } from "@/server_fetch_utils.js";
 
 export default {
   components: {
@@ -707,6 +710,9 @@ export default {
       addToCollectionModalIsOpen: false,
       batchShareModalIsOpen: false,
       isSampleFetchError: false,
+      advancedQueryResults: null,
+      advancedQueryConfig: null,
+      advancedQueryConfigRequestId: 0,
       itemsSelected: [],
       allSelected: false,
       filters: {
@@ -980,8 +986,16 @@ export default {
       return this.$store.state.groups_list || [];
     },
   },
+  watch: {
+    dataType() {
+      this.advancedQueryConfig = null;
+      this.advancedQueryResults = null;
+      this.loadAdvancedQueryConfig();
+    },
+  },
   created() {
     this.$store.commit("setPage", { type: this.dataType, page: 0 });
+    this.loadAdvancedQueryConfig();
 
     const savedState = localStorage.getItem(`datatable-state-${this.dataType}`);
     if (savedState) {
@@ -1227,6 +1241,21 @@ export default {
     });
   },
   methods: {
+    async loadAdvancedQueryConfig() {
+      const requestId = ++this.advancedQueryConfigRequestId;
+      const dataType = this.dataType;
+      try {
+        const config = await fetchAdvancedQueryConfig(dataType);
+        if (requestId === this.advancedQueryConfigRequestId && dataType === this.dataType) {
+          this.advancedQueryConfig = config;
+        }
+      } catch (error) {
+        console.error("Failed to load advanced query configuration:", error);
+        if (requestId === this.advancedQueryConfigRequestId) {
+          this.advancedQueryConfig = null;
+        }
+      }
+    },
     getColumnMinWidth(column) {
       const COLUMN_BASE_PADDING = 2.5;
       const CHAR_WIDTH_ESTIMATE = 0.75;
@@ -1597,6 +1626,9 @@ export default {
       this.$nextTick(() => {
         location.reload();
       });
+    },
+    handleAdvancedQueryResults(items) {
+      this.advancedQueryResults = items;
     },
     handleDateFilterModeChange(field) {
       this.filters[field].constraints[0].value = null;

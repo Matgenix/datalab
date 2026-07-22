@@ -1528,3 +1528,64 @@ export function invalidateToken(refcode) {
       throw error;
     });
 }
+
+export async function fetchQueryTypes(list_view) {
+  const url = new URL(`${API_URL}/query-types`);
+  url.searchParams.set("list_view", list_view);
+  const response = await fetch(url.toString(), { credentials: "include" });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data.error && data.error.message) || "Failed to fetch item types");
+  }
+  return data;
+}
+export const fetchItemTypes = fetchQueryTypes;
+
+export async function fetchAdvancedQueryConfig(data_type) {
+  const url = new URL(`${API_URL}/query-capabilities`);
+  url.searchParams.set("data_type", data_type);
+  const response = await fetch(url.toString(), { credentials: "include" });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data.error && data.error.message) || "Failed to fetch query capabilities");
+  }
+  return data.advanced_query;
+}
+
+export async function fetchQuerySchema(list_view, item_types) {
+  const url = new URL(`${API_URL}/query-schema`);
+  url.searchParams.set("list_view", list_view);
+  (item_types || []).forEach((t) => url.searchParams.append("item_type", t));
+  const response = await fetch(url.toString(), { credentials: "include" });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data.error && data.error.message) || "Failed to fetch query schema");
+  }
+  return data;
+}
+
+export async function runQuery(request, queryRoute = `${API_URL}/query`) {
+  const response = await fetch(
+    queryRoute.startsWith("http") ? queryRoute : `${API_URL}${queryRoute}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(request),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data.error && data.error.message) || "Query failed");
+  }
+  return data;
+}
+export const runItemQuery = runQuery;
+
+export async function fetchQueryOptions(optionsSource, query) {
+  const url = new URL(`${API_URL}/query-options/${optionsSource}`);
+  url.searchParams.set("q", query);
+  const response = await fetch(url.toString(), { credentials: "include" });
+  if (!response.ok) return { options: [] };
+  return response.json();
+}
