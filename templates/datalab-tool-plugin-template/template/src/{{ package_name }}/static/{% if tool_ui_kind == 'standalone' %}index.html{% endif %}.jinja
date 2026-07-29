@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ tool_name | e }}</title>
+    <style>
+      body {
+        font: 16px/1.5 system-ui, sans-serif;
+        margin: 3rem auto;
+        max-width: 50rem;
+        padding: 0 1rem;
+      }
+      pre {
+        background: #f4f4f4;
+        overflow: auto;
+        padding: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>{{ tool_name | e }}</h1>
+    <p>{{ description | e }}</p>
+    <h2>Current datalab user</h2>
+    <pre id="current-user">Loading…</pre>
+    <script>
+      const apiPrefix = window.location.pathname.split("/tools/plugins/")[0];
+      const launchUrl = new URL(window.location.href);
+      const fragment = new URLSearchParams(launchUrl.hash.slice(1));
+      const code = fragment.get("datalab_launch_code");
+      launchUrl.hash = "";
+      window.history.replaceState({}, "", launchUrl);
+
+      fetch("./exchange", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        })
+        .then(({ tool_access_token: toolAccessToken }) =>
+          fetch(`${apiPrefix}/get-current-user/`, {
+            credentials: "omit",
+            headers: { "DATALAB-API-KEY": toolAccessToken },
+          }),
+        )
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        })
+        .then((user) => {
+          document.querySelector("#current-user").textContent =
+            JSON.stringify(user, null, 2);
+        })
+        .catch((error) => {
+          document.querySelector("#current-user").textContent =
+            `Unable to load the current user: ${error}`;
+        });
+    </script>
+  </body>
+</html>

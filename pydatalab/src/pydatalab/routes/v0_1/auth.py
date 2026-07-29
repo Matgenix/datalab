@@ -24,7 +24,7 @@ from pydatalab.config import CONFIG
 from pydatalab.errors import UserRegistrationForbidden
 from pydatalab.feature_flags import FEATURE_FLAGS
 from pydatalab.logger import LOGGER
-from pydatalab.login import get_by_id
+from pydatalab.login import get_by_id, is_tool_access_token_user
 from pydatalab.models.people import AccountStatus, Identity, IdentityType, Person
 from pydatalab.mongo import flask_mongo, insert_pydantic_model_fork_safe
 from pydatalab.send_email import send_mail
@@ -589,6 +589,8 @@ def find_create_or_modify_user(
         # If there is currently a user logged in who has gone through OAuth with a new identity,
         # then update the user database with the identity
         if current_user.is_authenticated:
+            if is_tool_access_token_user(current_user):
+                raise Forbidden("Tool access tokens cannot modify login identities.")
             attach_identity_to_user(
                 current_user.id,
                 identity,
@@ -1067,6 +1069,16 @@ def get_authenticated_user_info():
 def generate_user_api_key():
     """Returns metadata associated with the currently authenticated user."""
     if current_user.is_authenticated:
+        if is_tool_access_token_user(current_user):
+            return (
+                jsonify(
+                    {
+                        "status": "failure",
+                        "message": ("Tool access tokens cannot rotate permanent API keys."),
+                    }
+                ),
+                403,
+            )
         new_key = "".join(random.choices(ascii_letters, k=KEY_LENGTH))  # noqa: S311
         flask_mongo.db.api_keys.update_one(
             {"_id": ObjectId(current_user.id)},

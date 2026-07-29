@@ -1,30 +1,66 @@
+<!-- This file was edited with the assistance of an AI model and requires human review from the contributor. -->
 # Plugins
 
+**Terms used:** [*Data block*](tools-glossary.md#data-block), [*In-app tool*](tools-glossary.md#in-app-tool), [*Standalone tool*](tools-glossary.md#standalone-tool).
+
 *datalab*'s plugin system is under active development, as is this documentation page.
-The most mature plugin type are custom application data blocks, a template repository for which can be found at [datalab-org/datalab-app-plugin-template](https://github.com/datalab-org/datalab-app-plugin-template) (see more below).
+It currently supports custom application *data blocks*, *standalone tools*, and
+*in-app tools*. See [Tools](tools.md).
 
 *datalab* supports plugins that extend the server with new functionality.
 Some self-declared plugins can be found via the [`datalab-plugin` topic on GitHub](https://github.com/topics/datalab-plugin), in lieu of a formal registry at this time.
 Plugins can also be kept private and installed from e.g., a private git repository, or a local path on the host, using the same installation described below.
 
 !!! warning "Only install plugins you trust"
-    Plugins are installed into the same Python environment as the *datalab* server and run with full server privileges. Only install plugins from sources you trust.
+    Plugins are installed into the same Python environment as the *datalab*
+    server and run with full server privileges. *In-app tool* plugins also run
+    JavaScript inside each signed-in user's datalab page. The deployment
+    administrator is responsible for reviewing and trusting the plugin's
+    source, dependencies, distributed frontend bundles, maintainer, and update
+    process. datalab's plugin validation is not a security sandbox.
 
 ## What a plugin is
 
-At present, a *datalab* plugin is a Python package that registers one or more [data block](blocks/index.md) classes via a Python entry point.
-Data blocks ingest a file (or set of files) attached to an item and render an interactive view of the parsed data, e.g. an NMR spectrum, an electrochemistry cycler trace, or an XRD pattern.
-*datalab* discovers them at server startup by enumerating the relevant entry point group, with no changes required to the core code.
+**Terms used:** [*Authentication*](tools-glossary.md#authentication), [*Data block*](tools-glossary.md#data-block), [*Item*](tools-glossary.md#item), [*Standalone tool*](tools-glossary.md#standalone-tool).
 
-Additional plugin types: custom item types, ingestion hooks, and webapp components are planned in the future (see [roadmap.md](roadmap.md)); please reach out if you have a specific use case.
+A *datalab* plugin is a Python package discovered at server startup through one of these Python entry-point groups:
+
+- `pydatalab.apps.plugins` registers [data block](blocks/index.md) classes. *Data blocks* ingest files attached to an *item* and render a view of the parsed data.
+- `pydatalab.tools` registers *standalone tools* that open separately and trusted
+  *in-app tools* that render within the webapp. See [Tools](tools.md) for their
+  lifecycle, trust boundary, and *authentication* model.
+
+Custom *item* types and ingestion hooks remain future work; see the [roadmap](roadmap.md).
 
 ## Writing a plugin
 
-The recommended starting point is the [Copier](https://copier.readthedocs.io/) template at [datalab-org/datalab-app-plugin-template](https://github.com/datalab-org/datalab-app-plugin-template), which scaffolds a minimal data block plugin together with the packaging boilerplate (entry point declaration, test scaffolding, and a working `pyproject.toml`).
-Rather than forking the repository, you should use it directly with Copier to
-generate a new plugin repository; see the README in the [datalab-org/datalab-app-plugin-template](https://github.com/datalab-org/datalab-app-plugin-template) repository for full instructions.
+**Terms used:** [*Authentication*](tools-glossary.md#authentication), [*Copier*](tools-glossary.md#copier), [*Data block*](tools-glossary.md#data-block), [*In-app tool*](tools-glossary.md#in-app-tool), [*Route authentication*](tools-glossary.md#route-authentication), [*Table-selection tool action*](tools-glossary.md#table-selection-tool-action), [*Tool launch grant*](tools-glossary.md#tool-launch-grant), [*Tool plugin*](tools-glossary.md#tool-plugin).
+
+For a *data block*, start from the [datalab-app-plugin-template](https://github.com/datalab-org/datalab-app-plugin-template).
+For either a standalone or an *in-app tool*, use the *Copier* template shipped in
+this repository:
+
+```shell
+uvx copier copy templates/datalab-tool-plugin-template ../my-datalab-tool
+```
+
+The template asks which UI kind and open mode the tool should use. The standalone variant
+contains a separate page and current-user access through a single-use
+*tool launch grant*. The in-app variant contains an automatically protected blueprint, a Vue
+single-file component, and a Vite build that targets datalab's frontend SDK.
+It can also declare an optional *table-selection tool action* without adding
+plugin-specific code to datalab's item tables.
+datalab applies one *authentication* policy to every route in a provider's
+declared blueprint. Object-level permissions still come from normal API calls
+or explicit permission-aware server queries; *route authentication* alone does
+not filter arbitrary database access.
+See [Writing a tool plugin](tools.md#writing-a-tool-plugin) for the provider contract.
+The [tool plugin tutorials](tools-tutorials/index.md) walk through two minimal
+Hello World examples: one standalone new-tab tool and one *in-app tool*.
 
 ## Installing plugins
+
+**Terms used:** [*plugins.toml*](tools-glossary.md#plugins-toml), [*Role*](tools-glossary.md#role).
 
 Plugins are declared in a `plugins.toml` file at the root of the repository (alongside `pydatalab/` and `webapp/`).
 The format mirrors the relevant fragments of `pyproject.toml`, and a generated JSON Schema describing the expected structure is checked in at `pydatalab/schemas/plugin_config.json`:
@@ -67,4 +103,4 @@ uv sync --all-extras --dev
 ```
 
 The same `invoke dev.install` task is used by the production Docker image (`.docker/server/Dockerfile`): a `plugins.toml` at the repository root is picked up automatically at build time, so plugins can be baked into a custom image without modifying the Dockerfile itself.
-It will also be invoked from the [*datalab* Ansible role](https://github.com/datalab-org/datalab-ansible-terraform) to provision plugins on a deployed server when a `plugins.toml` is provided; see the role documentation for details.
+It will also be invoked from the [*datalab* Ansible role](https://github.com/datalab-org/datalab-ansible-terraform) to provision plugins on a deployed server when a `plugins.toml` is provided; see the *role* documentation for details.

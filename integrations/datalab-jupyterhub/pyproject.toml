@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "datalab-jupyterhub"
+version = "0.1.0"
+description = "JupyterHub integration for datalab tool launches"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "datalab-api==0.5.0",
+    "httpx==0.28.1",
+    "jupyterhub==5.5.0",
+    "nbformat==5.10.4",
+]
+
+[project.entry-points."jupyterhub.authenticators"]
+datalab = "datalab_jupyterhub:DatalabAuthenticator"
+
+[project.scripts]
+datalab-jupyter-bootstrap = "datalab_jupyterhub.bootstrap:bootstrap_main"
+datalab-jupyter-healthcheck = "datalab_jupyterhub.healthcheck:main"
+datalab-jupyter-singleuser = "datalab_jupyterhub.bootstrap:singleuser_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+datalab_jupyterhub = ["resources/*.html"]
+
+[tool.setuptools.data-files]
+"etc/jupyter/jupyter_server_config.d" = [
+    "jupyter-config/jupyter_server_config.d/datalab_jupyterhub.json",
+]

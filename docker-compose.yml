@@ -38,9 +38,19 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - backend
+      backend:
+      tools:
+        aliases:
+          - datalab-api
     environment:
       - PYDATALAB_MONGO_URI=mongodb://database:27017/datalabvue
+      - PYDATALAB_APP_URL
+      - PYDATALAB_TOOLS__DISABLED
+      - PYDATALAB_TOOLS__JUPYTER__ENABLED
+      - PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL
+      - PYDATALAB_TOOLS__JUPYTER__PUBLIC_URL
+      - PYDATALAB_TOOLS__JUPYTER__CLIENT_ID
+      - PYDATALAB_TOOLS__JUPYTER__CLIENT_SECRET
       - WEB_CONCURRENCY=4
       - GUNICORN_CMD_ARGS=--timeout 120 --graceful-timeout 90
       - PORT=5001
@@ -91,10 +101,20 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - backend
+      backend:
+      tools:
+        aliases:
+          - datalab-api
     environment:
       - PYDATALAB_MONGO_URI=mongodb://database-dev:27017/datalabvue
       - PYDATALAB_FILE_DIRECTORY=/app/files
+      - PYDATALAB_APP_URL
+      - PYDATALAB_TOOLS__DISABLED
+      - PYDATALAB_TOOLS__JUPYTER__ENABLED
+      - PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL
+      - PYDATALAB_TOOLS__JUPYTER__PUBLIC_URL
+      - PYDATALAB_TOOLS__JUPYTER__CLIENT_ID
+      - PYDATALAB_TOOLS__JUPYTER__CLIENT_SECRET
 
   app-dev:
     profiles: ["dev"]
@@ -111,10 +131,51 @@ services:
       - VUE_APP_API_URL=${VUE_APP_API_URL:-http://localhost:5001}
       - CHOKIDAR_USEPOLLING=true
 
+  jupyterhub:
+    profiles: ["jupyterhub"]
+    image: ${PYDATALAB_JUPYTER_IMAGE:-datalab-jupyter:5.5.0}
+    build:
+      context: .
+      dockerfile: .docker/jupyterhub/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+        required: false
+      api-dev:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - datalab-jupyterhub-data:/srv/jupyterhub
+    ports:
+      - "${PYDATALAB_JUPYTERHUB_BIND_ADDRESS:-127.0.0.1}:${PYDATALAB_JUPYTERHUB_PORT:-8000}:8000"
+    networks:
+      tools:
+        aliases:
+          - datalab-jupyterhub
+    env_file:
+      - ./.docker/jupyterhub/.env
+    environment:
+      - PYDATALAB_JUPYTERHUB_API_URL=${PYDATALAB_JUPYTERHUB_API_URL:-http://datalab-api:5001}
+      - PYDATALAB_JUPYTERHUB_DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-datalab}_tools
+      - PYDATALAB_JUPYTERHUB_CONNECT_IP=datalab-jupyterhub
+      - PYDATALAB_JUPYTERHUB_VOLUME_PREFIX=${COMPOSE_PROJECT_NAME:-datalab}-jupyter
+      - PYDATALAB_JUPYTERHUB_SINGLEUSER_IMAGE=${PYDATALAB_JUPYTER_IMAGE:-datalab-jupyter:5.5.0}
+    healthcheck:
+      test: ["CMD", "datalab-jupyter-healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 networks:
   backend:
+    driver: bridge
+  tools:
     driver: bridge
 
 volumes:
   datalab-dev-dbdata:
   datalab-dev-files:
+  datalab-jupyterhub-data:

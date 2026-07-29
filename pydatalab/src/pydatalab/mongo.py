@@ -1,3 +1,4 @@
+# This file was edited with the assistance of an AI model and requires human review from the contributor.
 import atexit
 import hashlib
 import re
@@ -372,6 +373,41 @@ def create_default_indices(
     )
     ret += db.version_counters.create_index(
         "refcode", unique=True, name="unique refcode counter", background=background
+    )
+
+    ret.append(
+        db.tool_launch_grants.create_index(
+            "code_hash",
+            unique=True,
+            name="unique tool launch grant hash",
+            background=background,
+        )
+    )
+    ret.append(
+        db.tool_launch_grants.create_index(
+            "expires_at",
+            expireAfterSeconds=0,
+            name="expire tool launch grants",
+            background=background,
+        )
+    )
+
+    ret.append(
+        db.tool_sessions.create_index(
+            "token_hash",
+            unique=True,
+            partialFilterExpression={"token_hash": {"$type": "string"}},
+            name="unique tool access token hash",
+            background=background,
+        )
+    )
+    ret.append(
+        db.tool_sessions.create_index(
+            "expires_at",
+            expireAfterSeconds=0,
+            name="expire delegated tool sessions",
+            background=background,
+        )
     )
 
     return ret

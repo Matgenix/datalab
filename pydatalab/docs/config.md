@@ -10,7 +10,6 @@ administration"](deployment.md).
 *datalab* has 3 main configuration sources.
 
 1. The Python [`ServerConfig`][pydatalab.config.ServerConfig] (described below) that allows for *datalab*-specific configuration, such as database connection info, filestore locations and remote filesystem configuration.
-.
     - This can be provided via a JSON or YAML config file at the location provided by the `PYDATALAB_CONFIG_FILE` environment variable, or as environment variables themselves, prefixed with `PYDATALAB_`. The available configuration variables and their default values are listed below.
 2. Additional server configuration provided as environment variables, such as secrets like the Flask server's [`SECRET_KEY`][pydatalab.config.ServerConfig.SECRET_KEY], API keys for external services (e.g., SMTP `MAIL_PASSWORD`) and OAuth client credentials (for logging in via GitHub, ORCID, etc.).
 These can be provided as either:
@@ -29,6 +28,55 @@ These can be provided as either:
 
 > [!NOTE]
 > The possible ways to set configuration options can be inconsistent with each other, e.g., values required to be `None` in Python should be set to `null` in the JSON config file and as .env values. Similarly, boolean values may be set to `true` or `false` in the JSON config file, but can be set to {`1`, `yes`, `true`} or {`0`, `no`, `false`} in a `.env` file.
+
+Nested settings use a double underscore in environment-variable names.
+For example, `TOOLS.JUPYTER.ENABLED` becomes
+`PYDATALAB_TOOLS__JUPYTER__ENABLED`.
+
+When the frontend and API use different non-loopback origins, set
+`PYDATALAB_APP_URL` to the canonical frontend URL.
+The tool launch endpoint treats this URL as its trusted browser origin, and it
+is also used to derive the default co-deployed JupyterHub URL.
+Use HTTPS for this URL outside loopback development and testing.
+
+## Tools
+
+**Terms used:** [*Co-deployed JupyterHub*](tools-glossary.md#co-deployed-jupyterhub), [*External JupyterHub*](tools-glossary.md#external-jupyterhub), [*Jupyter external URL*](tools-glossary.md#jupyter-external-url), [*Jupyter public URL*](tools-glossary.md#jupyter-public-url), [*Jupyter tool provider*](tools-glossary.md#jupyter-tool-provider), [*Tool plugin*](tools-glossary.md#tool-plugin).
+
+Installed external *tool plugins* are enabled by default, for both standalone and
+in-app UI kinds.
+Disable selected plugins with the `TOOLS.DISABLED` set:
+
+```shell
+PYDATALAB_TOOLS__DISABLED='["example-tool", "another-tool"]'
+```
+
+The built-in *Jupyter tool provider* is opt-in:
+
+```shell
+export PYDATALAB_TOOLS__JUPYTER__ENABLED=true
+export PYDATALAB_TOOLS__JUPYTER__CLIENT_ID=pydatalab-jupyterhub
+export PYDATALAB_TOOLS__JUPYTER__CLIENT_SECRET="$(openssl rand -hex 32)"
+```
+
+For a Compose `.env` file, run `openssl rand -hex 32` separately and paste its
+literal output as the value; dotenv files do not execute shell substitutions.
+
+When enabled, leaving `EXTERNAL_URL` unset selects a *co-deployed JupyterHub*.
+Set `PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL` to the browser-facing URL of an *external JupyterHub* instead.
+`PUBLIC_URL` optionally overrides the browser-facing URL of the *co-deployed JupyterHub*.
+Empty URL environment variables are treated as unset.
+For the local Compose-managed Hub, keep the matching Hub service settings in
+`.docker/jupyterhub/.env`; that file should repeat the same client ID, client
+secret, and public URL.
+
+External, public, and APP-derived Hub URLs must use HTTPS outside loopback
+development and testing.
+The client secret is required whenever Jupyter is enabled, must contain at least
+32 characters without leading or trailing whitespace, and must be shared only
+with the corresponding Hub.
+See [Tools](tools.md) for the runtime and tool-access behavior,
+including [local and external JupyterHub deployment](tools.md#deploying-jupyterhub).
 
 ## Mandatory settings
 
@@ -218,6 +266,18 @@ public/custom/
       show_source: false
 
 ::: pydatalab.config.DeploymentMetadata
+    options:
+      heading_level: 2
+      show_root_heading: true
+      show_source: false
+
+::: pydatalab.config.ToolsSettings
+    options:
+      heading_level: 2
+      show_root_heading: true
+      show_source: false
+
+::: pydatalab.config.JupyterToolSettings
     options:
       heading_level: 2
       show_root_heading: true

@@ -1,0 +1,33 @@
+import { fileURLToPath } from "node:url";
+
+import vue from "@vitejs/plugin-vue";
+import { defineConfig } from "vite";
+
+const entrypoint = fileURLToPath(new URL("./src/main.js", import.meta.url));
+const outputDirectory = fileURLToPath(
+  new URL("../src/{{ package_name }}/static/frontend", import.meta.url),
+);
+
+export default defineConfig({
+  plugins: [vue()],
+  build: {
+    copyPublicDir: false,
+    emptyOutDir: true,
+    lib: {
+      entry: entrypoint,
+      name: "{{ tool_id | replace('-', '_') }}ToolFrontend",
+      formats: ["iife"],
+      fileName: () => "tool.js",
+    },
+    minify: false,
+    outDir: outputDirectory,
+    rolldownOptions: {
+      external: ["vue"],
+      output: {
+        globals: {
+          vue: "window.DatalabToolSDK.vue",
+        },
+      },
+    },
+  },
+});

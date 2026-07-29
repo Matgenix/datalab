@@ -1,0 +1,22 @@
+[project]
+name = "datalab-hello-standalone-tool"
+version = "0.1.0"
+description = "A minimal standalone Hello World tool for datalab"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+authors = [
+    { name = "datalab development team", email = "dev@datalab-org.io" },
+]
+dependencies = [
+    "datalab-server",
+]
+
+[project.entry-points."pydatalab.tools"]
+"hello-standalone" = "datalab_hello_standalone_tool:HelloStandaloneToolProvider"
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+"datalab_hello_standalone_tool" = ["static/*.html"]

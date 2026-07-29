@@ -1,0 +1,149 @@
+# This file was edited with the assistance of an AI model and requires human review from the contributor.
+_min_copier_version: "9.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+
+project_name:
+  type: str
+  help: Human-readable package name
+  default: datalab Example Tool
+
+distribution_name:
+  type: str
+  help: Python distribution name
+  default: "{{ project_name | lower | replace(' ', '-') | replace('_', '-') }}"
+  validator: >-
+    {% if not (distribution_name | regex_search('^[a-z0-9]+(?:-[a-z0-9]+)*$')) %}
+    Use lowercase letters, numbers, and single hyphens; start and end with a
+    letter or number.
+    {% endif %}
+
+package_name:
+  type: str
+  help: Importable Python package name
+  default: "{{ distribution_name | replace('-', '_') }}"
+  validator: >-
+    {% if not (package_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    Use a lowercase Python identifier that starts with a letter.
+    {% endif %}
+
+tool_id:
+  type: str
+  help: Lowercase, hyphenated tool ID; it must also be the entry-point name
+  default: "{{ distribution_name | replace('datalab-tool-', '') }}"
+  validator: >-
+    {% if not (tool_id | regex_search('^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')) %}
+    Use lowercase letters, numbers, and single hyphens; start with a letter.
+    {% endif %}
+
+tool_name:
+  type: str
+  help: Name shown in the datalab Tools catalog
+  default: "{{ project_name }}"
+
+tool_ui_kind:
+  type: str
+  help: Where does the tool's user interface run?
+  choices:
+    Standalone application: standalone
+    In-app tool (renders below the datalab navigation): in-app
+  default: standalone
+
+tool_open_mode:
+  type: str
+  help: Where should datalab open the tool?
+  choices:
+    Current browser tab: same_tab
+    New browser tab: new_tab
+  default: "{% if tool_ui_kind == 'in-app' %}same_tab{% else %}new_tab{% endif %}"
+
+add_item_table_action:
+  type: bool
+  help: Add an action to selected-item dropdowns?
+  default: false
+  when: "{{ tool_ui_kind == 'in-app' }}"
+
+item_table_action_id:
+  type: str
+  help: Provider-local action ID
+  default: open-selected
+  when: "{{ tool_ui_kind == 'in-app' and add_item_table_action }}"
+  validator: >-
+    {% if not (item_table_action_id | regex_search('^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')) %}
+    Use lowercase letters, numbers, and single hyphens; start with a letter.
+    {% endif %}
+
+item_table_action_label:
+  type: str
+  help: Label shown in the selected-items dropdown
+  default: Open selected
+  when: "{{ tool_ui_kind == 'in-app' and add_item_table_action }}"
+  validator: >-
+    {% if not item_table_action_label | trim %}
+    Enter a non-empty label.
+    {% endif %}
+
+item_table_action_tables:
+  type: str
+  help: Tables that should offer this action
+  multiselect: true
+  choices:
+    Samples: samples
+    Inventory: inventory
+    Equipment: equipment
+    Items within a collection: collection-items
+  default:
+    - samples
+  when: "{{ tool_ui_kind == 'in-app' and add_item_table_action }}"
+  validator: >-
+    {% if not item_table_action_tables %}
+    Select at least one table.
+    {% endif %}
+
+item_table_action_min_items:
+  type: int
+  help: Minimum number of selected items
+  default: 1
+  when: "{{ tool_ui_kind == 'in-app' and add_item_table_action }}"
+  validator: >-
+    {% if item_table_action_min_items < 1 or item_table_action_min_items > 100 %}
+    Enter a value from 1 to 100.
+    {% endif %}
+
+item_table_action_max_items:
+  type: int
+  help: Maximum number of selected items
+  default: 100
+  when: "{{ tool_ui_kind == 'in-app' and add_item_table_action }}"
+  validator: >-
+    {% if item_table_action_max_items < item_table_action_min_items
+          or item_table_action_max_items > 100 %}
+    Enter a value from the configured minimum to 100.
+    {% endif %}
+
+description:
+  type: str
+  help: Short catalog and package description
+  default: >-
+    {% if tool_ui_kind == "in-app" %}An in-app tool for datalab{% else %}A
+    standalone tool for datalab{% endif %}
+
+provider_class:
+  type: str
+  help: ToolProvider subclass name
+  default: ExampleToolProvider
+  validator: >-
+    {% if not (provider_class | regex_search('^[A-Z][A-Za-z0-9]*$')) %}
+    Use a PascalCase Python class name.
+    {% endif %}
+
+author_name:
+  type: str
+  help: Package author
+  default: datalab contributor
+
+author_email:
+  type: str
+  help: Package author email
+  default: contributor@example.com

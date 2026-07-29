@@ -117,10 +117,20 @@ def create_app(
     pydatalab.mongo.create_default_indices()
     pydatalab.mongo.run_startup_migrations()
 
+    from pydatalab.tools.registry import (
+        TOOL_REGISTRY_EXTENSION,
+        create_tool_registry,
+        register_tool_blueprints,
+    )
+
+    tool_registry = create_tool_registry()
+    app.extensions[TOOL_REGISTRY_EXTENSION] = tool_registry
+
     if CONFIG.FILE_DIRECTORY is not None:
         pathlib.Path(CONFIG.FILE_DIRECTORY).mkdir(parents=False, exist_ok=True)
 
     register_endpoints(app)
+    register_tool_blueprints(app, tool_registry)
     LOGGER.info("App created.")
 
     @app.route(f"{CONFIG.ROOT_PATH}logout")

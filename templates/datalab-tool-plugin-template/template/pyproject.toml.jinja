@@ -1,0 +1,26 @@
+[project]
+name = {{ distribution_name | tojson }}
+version = "0.1.0"
+description = {{ description | tojson }}
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+authors = [
+    { name = {{ author_name | tojson }}, email = {{ author_email | tojson }} },
+]
+dependencies = [
+    "datalab-server",
+]
+
+[project.entry-points."pydatalab.tools"]
+{{ tool_id | tojson }} = "{{ package_name }}:{{ provider_class }}"
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+{% if tool_ui_kind == "in-app" %}
+{{ package_name | tojson }} = ["static/frontend/*.js"]
+{% else %}
+{{ package_name | tojson }} = ["static/*"]
+{% endif %}

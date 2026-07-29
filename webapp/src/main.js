@@ -161,6 +161,7 @@ library.add(
 // import VueScrollTo from 'vue-scrollto';
 
 import store from "./store";
+import { installDatalabToolSdk } from "./tool_sdk.js";
 
 // css for vue-select
 import "vue-select/dist/vue-select.css";
@@ -170,6 +171,8 @@ import PrimeVue from "primevue/config";
 import DatalabPreset from "./primevue-theme-preset.js";
 
 const app = createApp(App);
+
+installDatalabToolSdk(router);
 
 app
   .use(store)

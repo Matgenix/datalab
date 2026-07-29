@@ -13,6 +13,7 @@ from .healthcheck import HEALTHCHECK
 from .info import INFO
 from .items import ITEMS
 from .remotes import REMOTES
+from .tools import TOOLS
 from .users import USERS
 
 BLUEPRINTS: tuple[Blueprint, ...] = (
@@ -29,6 +30,7 @@ BLUEPRINTS: tuple[Blueprint, ...] = (
     INFO,
     GRAPHS,
     EXPORT,
+    TOOLS,
 )
 
 __all__ = ("BLUEPRINTS", "OAUTH", "__api_version__", "OAUTH_PROXIES")

@@ -1,0 +1,13 @@
+_commit: local-example
+_src_path: templates/datalab-tool-plugin-template
+author_email: dev@datalab-org.io
+author_name: datalab development team
+description: An in-app Hello World tool for datalab
+distribution_name: datalab-hello-in-app-tool
+package_name: datalab_hello_in_app_tool
+project_name: datalab Hello In-App Tool
+provider_class: HelloInAppToolProvider
+tool_id: hello-in-app
+tool_name: Hello in-app
+tool_ui_kind: in-app
+tool_open_mode: same_tab

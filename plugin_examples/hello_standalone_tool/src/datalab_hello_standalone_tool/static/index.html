@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hello standalone</title>
+  </head>
+  <body>
+    <h1>Hello standalone</h1>
+    <p id="message">Loading...</p>
+
+    <script>
+      const apiPrefix = window.location.pathname.split("/tools/plugins/")[0];
+      const launchUrl = new URL(window.location.href);
+      const fragment = new URLSearchParams(launchUrl.hash.slice(1));
+      const code = fragment.get("datalab_launch_code");
+      launchUrl.hash = "";
+      window.history.replaceState({}, "", launchUrl);
+
+      async function fetchJson(url, options) {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      }
+
+      async function main() {
+        if (!code) {
+          throw new Error("Launch this tool from datalab.");
+        }
+
+        const exchange = await fetchJson("./exchange", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code }),
+        });
+
+        const samples = await fetchJson(`${apiPrefix}/samples/`, {
+          credentials: "omit",
+          headers: { "DATALAB-API-KEY": exchange.tool_access_token },
+        });
+
+        const name =
+          exchange.current_user.display_name || exchange.current_user.role || "datalab user";
+        const count = samples.samples?.length || 0;
+        document.querySelector("#message").textContent =
+          `Hello ${name}. You can access ${count} sample(s).`;
+      }
+
+      main().catch((error) => {
+        document.querySelector("#message").textContent = `Error: ${error.message || error}`;
+      });
+    </script>
+  </body>
+</html>

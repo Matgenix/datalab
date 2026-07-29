@@ -3,14 +3,18 @@ import json
 import logging
 import os
 import platform
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import (
+    AnyHttpUrl,
     AnyUrl,
     BaseModel,
     BaseSettings,
     Field,
+    SecretStr,
     ValidationError,
     root_validator,
     validator,
@@ -19,9 +23,29 @@ from pydantic import (
 from pydatalab.models import Person
 from pydatalab.models.utils import RandomAlphabeticalRefcodeFactory, RefCodeFactory
 
-__all__ = ("CONFIG", "ServerConfig", "DeploymentMetadata", "RemoteFilesystem")
+__all__ = (
+    "CONFIG",
+    "ServerConfig",
+    "DeploymentMetadata",
+    "RemoteFilesystem",
+    "ToolsSettings",
+    "JupyterToolSettings",
+)
 
 config_logger = logging.getLogger("pydatalab.config")
+
+
+def _is_loopback_host(host: str | None) -> bool:
+    """Return whether a URL host is explicitly local to this machine."""
+    if host is None:
+        return False
+    normalized_host = str(host).rstrip(".").lower()
+    if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
+        return True
+    try:
+        return ip_address(normalized_host).is_loopback
+    except ValueError:
+        return False
 
 
 def config_file_settings(settings: BaseSettings) -> dict[str, Any]:
@@ -124,6 +148,108 @@ class SMTPSettings(BaseModel):
     MAIL_DEFAULT_SENDER: str = Field(
         "", description="The email address to use as the sender for emails."
     )
+
+
+class JupyterToolSettings(BaseModel):
+    """Configuration for the built-in JupyterLab tool."""
+
+    ENABLED: bool = Field(
+        False,
+        description="Whether the JupyterLab tool is available.",
+    )
+    EXTERNAL_URL: AnyHttpUrl | None = Field(
+        None,
+        description="Base URL of an independently deployed datalab-compatible JupyterHub.",
+    )
+    PUBLIC_URL: AnyHttpUrl | None = Field(
+        None,
+        description="Browser-facing base URL of a co-deployed JupyterHub.",
+    )
+    CLIENT_ID: str = Field(
+        "pydatalab-jupyterhub",
+        description="Client identifier used when JupyterHub exchanges launch grants.",
+    )
+    CLIENT_SECRET: SecretStr | None = Field(
+        None,
+        description="Shared secret used when JupyterHub exchanges launch grants.",
+    )
+
+    @root_validator(pre=True)
+    def normalize_environment_keys(cls, values):
+        """Map lower-case keys produced by Pydantic's nested environment parser."""
+        values = dict(values or {})
+        for field_name in (
+            "ENABLED",
+            "EXTERNAL_URL",
+            "PUBLIC_URL",
+            "CLIENT_ID",
+            "CLIENT_SECRET",
+        ):
+            environment_key = field_name.lower()
+            if field_name not in values and environment_key in values:
+                values[field_name] = values.pop(environment_key)
+        return values
+
+    @validator("EXTERNAL_URL", "PUBLIC_URL", pre=True)
+    def empty_urls_are_unset(cls, value):
+        """Treat empty environment variables as absent optional URLs."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @validator("EXTERNAL_URL", "PUBLIC_URL")
+    def jupyter_urls_are_bases(cls, value):
+        """Reject URL components that cannot be part of a Hub base URL."""
+        if value is not None and (
+            value.user is not None
+            or value.password is not None
+            or value.query is not None
+            or value.fragment is not None
+        ):
+            raise ValueError(
+                "Jupyter base URLs must not contain credentials, a query, or a fragment"
+            )
+        return value
+
+    @validator("CLIENT_ID")
+    def client_id_is_not_empty(cls, value):
+        if not value.strip():
+            raise ValueError("Jupyter CLIENT_ID must not be empty")
+        return value.strip()
+
+
+class ToolsSettings(BaseModel):
+    """Configuration for built-in and installed standalone tools."""
+
+    JUPYTER: JupyterToolSettings = Field(default_factory=JupyterToolSettings)
+    DISABLED: set[str] = Field(
+        default_factory=set,
+        description="Installed tool plugin IDs disabled for this deployment.",
+    )
+
+    @root_validator(pre=True)
+    def normalize_environment_keys(cls, values):
+        """Map known lower-case keys while retaining provider-owned settings."""
+        values = dict(values or {})
+        for field_name in ("JUPYTER", "DISABLED"):
+            environment_key = field_name.lower()
+            if field_name not in values and environment_key in values:
+                values[field_name] = values.pop(environment_key)
+        return values
+
+    @validator("DISABLED", pre=True)
+    def parse_disabled_tool_ids(cls, value):
+        """Parse the JSON list form used by nested environment settings."""
+        if value is None:
+            return set()
+        if isinstance(value, str):
+            if not value.strip():
+                return set()
+            value = json.loads(value)
+        return value
+
+    class Config:
+        extra = "allow"
 
 
 class ServerConfig(BaseSettings):
@@ -256,6 +382,11 @@ its importance when deploying a datalab instance.""",
         description="A list of block type slugs (e.g. ['cycle', 'xrd']) that should be processed asynchronously via the task queue. Defaults to no blocks.",
     )
 
+    TOOLS: ToolsSettings = Field(
+        default_factory=ToolsSettings,
+        description="Configuration for built-in and installed standalone tools.",
+    )
+
     BACKUP_STRATEGIES: dict[str, BackupStrategy] | None = Field(
         {
             "daily-snapshots": BackupStrategy(
@@ -347,6 +478,53 @@ its importance when deploying a datalab instance.""",
 
         return values
 
+    @root_validator
+    def validate_jupyter_configuration(cls, values):
+        """Validate security-sensitive Jupyter settings in one place."""
+        tools = values.get("TOOLS")
+        if tools is None or not tools.JUPYTER.ENABLED:
+            return values
+
+        jupyter = tools.JUPYTER
+        if jupyter.CLIENT_SECRET is None:
+            raise ValueError(
+                "TOOLS.JUPYTER.CLIENT_SECRET must be set when the Jupyter tool is enabled"
+            )
+
+        client_secret = jupyter.CLIENT_SECRET.get_secret_value()
+        if client_secret != client_secret.strip() or len(client_secret) < 32:
+            raise ValueError(
+                "TOOLS.JUPYTER.CLIENT_SECRET must contain at least 32 characters "
+                "and must not start or end with whitespace"
+            )
+
+        browser_url = jupyter.EXTERNAL_URL or jupyter.PUBLIC_URL
+        if browser_url is None and values.get("APP_URL"):
+            browser_url = f"{str(values['APP_URL']).rstrip('/')}/jupyter/"
+        if browser_url is None:
+            browser_url = "http://localhost:8000/jupyter/"
+
+        parsed_browser_url = urlsplit(str(browser_url))
+        if (
+            parsed_browser_url.scheme not in {"http", "https"}
+            or parsed_browser_url.hostname is None
+            or parsed_browser_url.username is not None
+            or parsed_browser_url.password is not None
+            or parsed_browser_url.query
+            or parsed_browser_url.fragment
+        ):
+            raise ValueError("The browser-facing Jupyter URL must be an absolute HTTP(S) URL")
+        if (
+            parsed_browser_url.scheme != "https"
+            and not values.get("TESTING")
+            and not _is_loopback_host(parsed_browser_url.hostname)
+        ):
+            raise ValueError(
+                "The browser-facing Jupyter URL must use HTTPS unless it targets "
+                "a loopback host or datalab is running in testing mode"
+            )
+        return values
+
     @validator("LOG_FILE")
     def make_missing_log_directory(cls, v):
         """Make sure that the log directory exists and is writable."""
@@ -362,6 +540,7 @@ its importance when deploying a datalab instance.""",
 
     class Config:
         env_prefix = "pydatalab_"
+        env_nested_delimiter = "__"
         extra = "allow"
         env_file = ".env"
         env_file_encoding = "utf-8"
