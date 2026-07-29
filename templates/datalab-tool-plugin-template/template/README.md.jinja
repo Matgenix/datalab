@@ -1,29 +1,14 @@
-<!-- This file was edited with the assistance of an AI model and requires human review from the contributor. -->
-# {{ project_name }}
-
-**Terms used:** {% if tool_ui_kind == "in-app" %}[*In-app tool*](https://docs.datalab-org.io/tools-glossary/#in-app-tool){% if add_item_table_action %}, [*Table-selection tool action*](https://docs.datalab-org.io/tools-glossary/#table-selection-tool-action){% endif %}{% else %}[*Standalone tool*](https://docs.datalab-org.io/tools-glossary/#standalone-tool){% endif %}.
+# {{ tool_name }}
 
 {{ description }}
 
-This package provides a {% if tool_ui_kind == "in-app" %}trusted *in-app tool*
-supplied as a frontend bundle{% else %}*standalone tool*{% endif %} through datalab's `pydatalab.tools`
-entry-point group.
+This package registers the `{{ tool_id }}` tool through the
+`pydatalab.tools` entry-point group.
 
-## Development
-
-**Terms used:** [*datalab tool*](https://docs.datalab-org.io/tools-glossary/#datalab-tool), [*plugins.toml*](https://docs.datalab-org.io/tools-glossary/#plugins-toml).
-
-Install it in a datalab checkout by adding it to the root `plugins.toml`:
-
-```toml
-dependencies = ["{{ distribution_name }}"]
-
-[tool.uv.sources]
-{{ distribution_name }} = { path = "../{{ distribution_name }}", editable = true }
-```
+## Develop and install
 
 {% if tool_ui_kind == "in-app" %}
-Build the frontend before installing the Python package:
+Build the frontend first:
 
 ```shell
 cd frontend
@@ -32,123 +17,57 @@ yarn build
 cd ..
 ```
 
-The build creates
-`src/{{ package_name }}/static/frontend/tool.js`. Commit the dependency
-lockfile and this compiled artifact so a deployment administrator can review
-and install the exact code that will run in users' browsers. During frontend
-development, `yarn build:watch` rebuilds that file when its sources change;
-refresh the *datalab tool* page to load it.
-The source distribution includes the reviewable `frontend` sources and
-lockfile, while the installed wheel contains only the compiled browser asset.
+Commit `frontend/yarn.lock` and
+`src/{{ distribution_name | replace('-', '_') }}/static/frontend/tool.js`.
+The source distribution includes the frontend sources; the wheel includes the
+compiled bundle.
+{% endif %}
+
+Add the plugin to the datalab checkout's root `plugins.toml`:
+
+```toml
+dependencies = [{{ distribution_name | tojson }}]
+
+[tool.uv.sources]
+{{ distribution_name }} = { path = "../{{ distribution_name }}", editable = true }
+```
+
+Then install it and restart the API:
+
+```shell
+cd pydatalab
+uv run invoke dev.install
+```
+
+## How it accesses datalab
+
+{% if tool_ui_kind == "in-app" %}
+The provider serves one *in-app frontend bundle*. datalab authenticates the
+*provider route*, and the component uses `window.datalabToolSdk.api` with the
+current *browser session*. Normal datalab API permissions still decide which
+data the user can access.
 {% if add_item_table_action %}
 
-This provider declares the *table-selection tool action*
-**{{ item_table_action_label }}** for
-`{{ item_table_action_tables | join("`, `") }}`. It is enabled when between
-{{ item_table_action_min_items }} and {{ item_table_action_max_items }} selected
-rows have immutable refcodes. `ToolView.vue` shows how to read those refcodes
-from `DatalabToolSDK.selection.current()`. Retrieve the current item data
-through normal permission-aware API routes; do not trust the URL as proof of
-access.
+The **{{ item_table_action_label }}** table action is available in
+`{{ item_table_action_tables | join("`, `") }}` for selections of
+{{ item_table_action_min_items }} to {{ item_table_action_max_items }} items.
+Read its ordered refcodes with `datalabToolSdk.selection.current()` and load the
+items through permission-aware API routes.
 {% endif %}
-
-Then run `cd pydatalab && uv run invoke dev.install` from the datalab checkout
-and restart the API.
 {% else %}
-Then run `cd pydatalab && uv run invoke dev.install` from the datalab checkout
-and restart the API.
-{% endif %}
-The provider appears in the Tools catalog unless its ID, `{{ tool_id }}`, is present in `TOOLS.DISABLED`.
-
-## Provider lifecycle
-
-**Terms used:** {% if tool_ui_kind == "in-app" %}[*Browser session*](https://docs.datalab-org.io/tools-glossary/#browser-session), [*In-app tool*](https://docs.datalab-org.io/tools-glossary/#in-app-tool), [*Provider blueprint*](https://docs.datalab-org.io/tools-glossary/#provider-blueprint), [*Tool frontend SDK*](https://docs.datalab-org.io/tools-glossary/#tool-frontend-sdk), [*Tool host*](https://docs.datalab-org.io/tools-glossary/#tool-host){% else %}[*Browser session*](https://docs.datalab-org.io/tools-glossary/#browser-session), [*Launch code*](https://docs.datalab-org.io/tools-glossary/#launch-code), [*Launch code exchange*](https://docs.datalab-org.io/tools-glossary/#launch-code-exchange), [*Provider blueprint*](https://docs.datalab-org.io/tools-glossary/#provider-blueprint), [*Standalone tool*](https://docs.datalab-org.io/tools-glossary/#standalone-tool), [*Tool access token*](https://docs.datalab-org.io/tools-glossary/#tool-access-token), [*Tool launch grant*](https://docs.datalab-org.io/tools-glossary/#tool-launch-grant), [*Trusted origin*](https://docs.datalab-org.io/tools-glossary/#trusted-origin){% endif %}.
-
-`{{ provider_class }}` is instantiated without arguments when the API starts.
-Its metadata is displayed in the Tools catalog.
-`is_available` can hide it from individual users.
-{% if tool_ui_kind == "standalone" %}
-`launch` returns an absolute standalone URL.
-The included blueprint serves the local page and *launch code exchange*. A provider can
-set `blueprint = None` only when its external application needs no
-datalab-hosted callback. An external application that exchanges *launch codes* through
-datalab needs a service-authenticated *provider blueprint*.
-
-The included provider issues a single-use *tool launch grant*.
-The framework automatically requires an active datalab *browser session* and
-*trusted origin* for every route in the blueprint. The exchange consumes the
-grant and returns a *tool access token* to the standalone page.
-The *launch code* is carried in the URL fragment, which is not sent with the
-initial HTTP request, and the page removes it before making API requests.
-The page keeps that token in memory and uses it as `DATALAB-API-KEY`; it does not
-use the Flask session for datalab API calls and never handles a *permanent API key*.
-
-For a separately hosted UI, expose any datalab-hosted exchange route through a
-*provider blueprint* with `route_auth = ToolRouteAuth.SERVICE`, and implement
-`authenticate_service_request()` for its machine client before calling
-`exchange_launch_code`.
-Keep the machine-client secret outside source control and never expose it to
-browser JavaScript.
-Return the *tool access token* only to an isolated user runtime or keep it in the
-remote backend.
-Never call `/get-api-key/` or ask users to paste a permanent key.
-{% else %}
-`launch` authorizes entry into the generic *datalab tool* host and returns no
-external URL. The webapp then loads `frontend/tool.js` from this provider's
-blueprint namespace and mounts the registered component below the normal
-navigation.
-
-The starter frontend:
-
-- builds one classic IIFE JavaScript bundle;
-- externalizes `vue` and uses the exact Vue runtime supplied by datalab;
-- embeds its prefixed CSS into that bundle;
-- synchronously registers through `window.DatalabToolSDK`; and
-- accesses datalab through the SDK with the current *browser session*.
-
-SDK version 1 exposes the host Vue runtime, a curated component set, `get` and
-`post` API helpers, navigation, and dialogs. Treat that SDK as the public
-frontend interface. Do not import datalab's private `@/` modules, Vuex store, or
-source components directly, and do not bundle another copy of Vue. Avoid
-dynamic imports because the host loads only the declared classic entrypoint.
-
-`ToolView.vue` calls existing datalab API routes through the SDK, so the normal
-current-user permission filters apply. The *browser session* is sufficient for
-*in-app tools*: do not issue, store, or expose a *tool access token* in frontend
-JavaScript.
+The provider issues a single-use *launch code*. Its protected exchange route
+returns a *tool access token*, which the standalone page keeps only in
+memory and sends to normal datalab API routes as `DATALAB-API-KEY`.
 {% endif %}
 
-## Trust boundary
+## Administrator trust
 
-**Terms used:** [*Authentication*](https://docs.datalab-org.io/tools-glossary/#authentication), [*Item*](https://docs.datalab-org.io/tools-glossary/#item), [*Object-level authorization*](https://docs.datalab-org.io/tools-glossary/#object-level-authorization), [*Route authentication*](https://docs.datalab-org.io/tools-glossary/#route-authentication), [*Tool context*](https://docs.datalab-org.io/tools-glossary/#tool-context), [*Tool plugin*](https://docs.datalab-org.io/tools-glossary/#tool-plugin).
+Tool plugins are trusted Python packages. In-app bundles are also trusted
+JavaScript running inside the signed-in datalab application. An administrator
+must review the source, dependencies, lockfiles, compiled assets, maintainers,
+and release provenance before installation and every upgrade.
 
-*Tool plugins* execute in the datalab API process and are
-administrator-trusted code.
-{% if tool_ui_kind == "in-app" %}
-This plugin's compiled JavaScript also executes inside the authenticated
-datalab web application. It can act with each signed-in user's session, inspect
-or alter the page, and access every datalab resource that user may access.
-{% endif %}
-`ToolContext` is the supported interface for current-user metadata, but it is not a sandbox.
-Prefer normal datalab API calls over importing database objects from the server package.
-`is_available` controls catalog and launch visibility only.
-Every declared blueprint route is authenticated automatically using the
-provider's single route policy. Browser *authentication* does not apply *item*
-permission filters to arbitrary database queries: custom backend routes must
-still use permission-aware datalab services or `get_default_permissions()`.
-Direct app-level route registration is unsupported.
-
-The deployment administrator—not the registry or SDK validator—is responsible
-for deciding whether this plugin is trustworthy.
-{% if tool_ui_kind == "in-app" %}
-Before installation and every upgrade, review its maintainers, Python and
-JavaScript source, dependencies and lockfiles, release provenance, and compiled
-browser bundle.
-{% else %}
-Before installation and every upgrade, review its maintainers, Python and
-standalone frontend source, dependencies and lockfiles, release provenance, and
-distributed package.
-If the standalone UI or its backend is hosted separately, also review and trust
-the remote operator, deployment, *tool access token* destination, and data retention and
-deletion policies.
-{% endif %}
+See the datalab
+[Tools documentation](https://docs.datalab-org.io/tools/) and
+[glossary](https://docs.datalab-org.io/tools-glossary/) for the complete
+contracts and security model.

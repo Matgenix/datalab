@@ -1,4 +1,3 @@
-# This file was edited with the assistance of an AI model and requires human review from the contributor.
 """Application-scoped discovery and registration of tool providers."""
 
 import re
@@ -31,8 +30,8 @@ class ToolRegistry:
         self._providers: dict[str, ToolProvider] = {}
         self._failed_provider_ids: set[str] = set()
 
-    def register(self, provider: ToolProvider, entry_point_name: str | None = None) -> bool:
-        """Validate and register ``provider``, returning whether it was accepted."""
+    def register(self, provider: ToolProvider, entry_point_name: str | None = None) -> None:
+        """Validate and register ``provider``."""
         if not isinstance(provider, ToolProvider):
             raise TypeError("Tool plugins must be ToolProvider instances")
         if not isinstance(provider.metadata, ToolMetadata):
@@ -64,10 +63,9 @@ class ToolRegistry:
             )
         if provider.id in self._providers:
             LOGGER.error("Ignoring duplicate tool provider ID %r", provider.id)
-            return False
+            return
 
         self._providers[provider.id] = provider
-        return True
 
     def get(self, tool_id: str) -> ToolProvider | None:
         """Return a registered provider by ID."""
@@ -87,20 +85,25 @@ class ToolRegistry:
             return CONFIG.TOOLS.JUPYTER.ENABLED
         return tool_id not in CONFIG.TOOLS.DISABLED
 
+    def _is_available(self, provider: ToolProvider, context: ToolContext) -> bool:
+        if not self.is_enabled(provider.id):
+            return False
+        try:
+            return provider.is_available(context)
+        except Exception:
+            LOGGER.exception(
+                "Tool provider %r failed its current-user availability check",
+                provider.id,
+            )
+            return False
+
     def available_for(self, context: ToolContext) -> list[ToolProvider]:
         """Return enabled providers whose availability check succeeds."""
-        providers: list[ToolProvider] = []
-        for tool_id, provider in self._providers.items():
-            if not self.is_enabled(tool_id):
-                continue
-            try:
-                if provider.is_available(context):
-                    providers.append(provider)
-            except Exception:
-                LOGGER.exception(
-                    "Tool provider %r failed its current-user availability check", tool_id
-                )
-        return providers
+        return [
+            provider
+            for provider in self._providers.values()
+            if self._is_available(provider, context)
+        ]
 
     def available_provider(
         self,
@@ -108,16 +111,10 @@ class ToolRegistry:
         context: ToolContext,
     ) -> ToolProvider | None:
         """Return one provider only when enabled and available to ``context``."""
-        if not self.is_enabled(tool_id):
-            return None
         provider = self.get(tool_id)
         if provider is None:
             return None
-        try:
-            return provider if provider.is_available(context) else None
-        except Exception:
-            LOGGER.exception("Tool provider %r failed its current-user availability check", tool_id)
-            return None
+        return provider if self._is_available(provider, context) else None
 
     @property
     def providers(self) -> tuple[ToolProvider, ...]:
@@ -130,19 +127,15 @@ def create_tool_registry() -> ToolRegistry:
     from .jupyter import JupyterToolProvider
 
     registry = ToolRegistry()
-    registry.register(JupyterToolProvider())
+    if CONFIG.TOOLS.JUPYTER.ENABLED:
+        registry.register(JupyterToolProvider())
 
     for entry_point in sorted(
         entry_points(group=TOOL_ENTRY_POINT_GROUP),
         key=lambda candidate: candidate.name,
     ):
         try:
-            provider_class = entry_point.load()
-            if not isinstance(provider_class, type) or not issubclass(provider_class, ToolProvider):
-                raise TypeError(
-                    f"Entry point {entry_point.name!r} must resolve to a ToolProvider subclass"
-                )
-            registry.register(provider_class(), entry_point_name=entry_point.name)
+            registry.register(entry_point.load()(), entry_point_name=entry_point.name)
         except Exception:
             LOGGER.exception("Unable to load tool plugin entry point %r", entry_point.name)
 
@@ -178,9 +171,7 @@ def register_tool_blueprints(app: "Flask", registry: ToolRegistry) -> None:
                     jsonify({"status": "error", "message": "A browser session is required"}),
                     403,
                 )
-            if request.method not in {"GET", "HEAD"} and not request_origin_is_allowed(
-                require_origin=True
-            ):
+            if request.method not in {"GET", "HEAD"} and not request_origin_is_allowed():
                 return jsonify({"status": "error", "message": "Untrusted request origin"}), 403
             return None
 

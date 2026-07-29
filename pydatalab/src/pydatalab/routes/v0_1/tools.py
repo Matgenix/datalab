@@ -4,6 +4,7 @@ import json
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user
+from pydantic import AnyHttpUrl, parse_obj_as
 
 from pydatalab.logger import LOGGER
 from pydatalab.login import is_browser_session_user
@@ -11,10 +12,8 @@ from pydatalab.models.people import AccountStatus
 from pydatalab.permissions import active_users_or_get_only
 from pydatalab.tools.auth import request_origin_is_allowed
 from pydatalab.tools.base import (
-    InAppToolUI,
     StandaloneToolUI,
     ToolContext,
-    ToolLaunchResult,
 )
 from pydatalab.tools.grants import BoundToolLaunchGrantIssuer
 from pydatalab.tools.registry import TOOL_REGISTRY_EXTENSION, ToolRegistry
@@ -72,7 +71,7 @@ def launch_tool(tool_id: str):
     if not current_user.is_authenticated or not is_browser_session_user(current_user):
         return jsonify({"status": "error", "message": "A browser session is required"}), 403
 
-    if not request_origin_is_allowed(require_origin=True):
+    if not request_origin_is_allowed():
         return jsonify({"status": "error", "message": "Untrusted request origin"}), 403
 
     context = _active_tool_context()
@@ -86,19 +85,16 @@ def launch_tool(tool_id: str):
     issuer = BoundToolLaunchGrantIssuer(tool_id=tool_id, user_id=context.user_id)
     try:
         result = provider.launch(context, issuer)
-        if not isinstance(result, ToolLaunchResult):
-            raise TypeError("Tool providers must return ToolLaunchResult")
-        if isinstance(provider.metadata.ui, StandaloneToolUI) and result.url is None:
-            raise TypeError("Standalone tool launches must return a URL")
-        if isinstance(provider.metadata.ui, InAppToolUI) and result.url is not None:
-            raise TypeError("In-app tool launches must not return a URL")
+        launch_data = {}
+        if isinstance(provider.metadata.ui, StandaloneToolUI):
+            if not isinstance(result, str):
+                raise TypeError("Standalone tool launches must return an HTTP(S) URL")
+            launch_data["url"] = str(parse_obj_as(AnyHttpUrl, result))
+        elif result is not None:
+            raise TypeError("In-app tool launches must return None")
     except Exception:
         LOGGER.exception("Unable to launch tool provider %r", tool_id)
         return jsonify({"status": "error", "message": "Unable to launch tool"}), 503
-
-    launch_data = {}
-    if result.url is not None:
-        launch_data["url"] = str(result.url)
 
     response = jsonify(launch_data)
     response.headers["Cache-Control"] = "no-store"

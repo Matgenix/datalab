@@ -3,12 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hello standalone</title>
+    <title>{{ tool_name | e }}</title>
   </head>
   <body>
-    <h1>Hello standalone</h1>
+    <h1>{{ tool_name | e }}</h1>
     <p id="message">Loading...</p>
-
     <script>
       const apiPrefix = window.location.pathname.split("/tools/plugins/")[0];
       const launchUrl = new URL(window.location.href);
@@ -36,7 +35,6 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code }),
         });
-
         const apiOptions = {
           credentials: "omit",
           headers: { "DATALAB-API-KEY": exchange.tool_access_token },
@@ -51,9 +49,8 @@
           currentUser.immutable_id ||
           currentUser.role ||
           "datalab user";
-        const count = samples.samples?.length || 0;
         document.querySelector("#message").textContent =
-          `Hello ${name}. You can access ${count} sample(s).`;
+          `Hello ${name}. You can access ${samples.samples?.length || 0} sample(s).`;
       }
 
       main().catch((error) => {

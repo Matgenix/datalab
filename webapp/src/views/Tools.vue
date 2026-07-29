@@ -64,11 +64,11 @@
             <button
               class="btn btn-primary align-self-start"
               type="button"
-              :disabled="isLaunching(tool.id) || !isSupportedTool(tool)"
+              :disabled="launchingToolId !== null || !isSupportedTool(tool)"
               :data-testid="`tool-launch-${tool.id}`"
               @click="openTool(tool)"
             >
-              <template v-if="isLaunching(tool.id)">
+              <template v-if="launchingToolId === tool.id">
                 <span class="spinner-border spinner-border-sm mr-2" aria-hidden="true"></span>
                 Opening...
               </template>
@@ -101,7 +101,7 @@ export default {
       isLoading: true,
       loadError: null,
       launchError: null,
-      launchingToolIds: new Set(),
+      launchingToolId: null,
     };
   },
   mounted() {
@@ -124,12 +124,9 @@ export default {
     isSupportedTool(tool) {
       return isSupportedTool(tool);
     },
-    isLaunching(toolId) {
-      return this.launchingToolIds.has(toolId);
-    },
     async openTool(tool) {
       this.launchError = null;
-      this.launchingToolIds.add(tool.id);
+      this.launchingToolId = tool.id;
 
       try {
         await openTool(tool, this.$router);
@@ -138,7 +135,9 @@ export default {
           error instanceof Error ? error.message : String(error)
         }`;
       } finally {
-        this.launchingToolIds.delete(tool.id);
+        if (this.launchingToolId === tool.id) {
+          this.launchingToolId = null;
+        }
       }
     },
   },

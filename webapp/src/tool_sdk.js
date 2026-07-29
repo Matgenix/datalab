@@ -1,4 +1,3 @@
-// This file was edited with the assistance of an AI model and requires human review from the contributor.
 import * as Vue from "vue";
 
 import BokehPlot from "@/components/BokehPlot.vue";
@@ -11,8 +10,6 @@ import { toolApiGet, toolApiPost } from "@/server_fetch_utils.js";
 
 export const TOOL_SDK_VERSION = 1;
 
-const TOOL_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-const TOOL_ACTION_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const MAX_SELECTED_ITEM_REFCODES = 100;
 const registeredInAppTools = new Map();
 const inAppToolLoads = new Map();
@@ -39,26 +36,19 @@ function normalizeQueryValues(value, limit = Number.POSITIVE_INFINITY) {
   return normalized;
 }
 
-function registerInAppTool(definition) {
-  const { id, sdkVersion, component } = definition || {};
-  if (typeof id !== "string" || !TOOL_ID_PATTERN.test(id)) {
-    throw new Error("An in-app tool must register its provider ID.");
-  }
-  if (sdkVersion !== TOOL_SDK_VERSION) {
-    throw new Error(`In-app tool ${id} requires unsupported frontend SDK version ${sdkVersion}.`);
-  }
+function registerInAppTool(component) {
+  const id = document.currentScript?.dataset?.datalabToolId;
   if ((typeof component !== "object" || component === null) && typeof component !== "function") {
-    throw new Error(`In-app tool ${id} did not register a frontend component.`);
+    throw new Error("An in-app tool must register a frontend component.");
   }
-  const loadingToolId = document.currentScript?.dataset?.DatalabToolId;
-  if (!expectedRegistrations.has(id) || loadingToolId !== id) {
-    throw new Error(`In-app tool ${id} was not requested by the datalab tool host.`);
+  if (!id || !expectedRegistrations.has(id)) {
+    throw new Error("This in-app tool was not requested by the datalab tool host.");
   }
   if (registeredInAppTools.has(id)) {
     throw new Error(`In-app tool ${id} is already registered.`);
   }
 
-  registeredInAppTools.set(id, Object.freeze({ id, sdkVersion, component }));
+  registeredInAppTools.set(id, component);
 }
 
 function providerBaseUrl(toolId) {
@@ -102,12 +92,12 @@ function loadInAppToolScript(tool) {
 
     script.async = true;
     script.crossOrigin = "use-credentials";
-    script.dataset.DatalabToolId = tool.id;
+    script.dataset.datalabToolId = tool.id;
     script.src = resolveEntrypointUrl(tool);
     expectedRegistrations.add(tool.id);
     script.addEventListener("load", () => {
-      const registration = registeredInAppTools.get(tool.id);
-      if (!registration) {
+      const component = registeredInAppTools.get(tool.id);
+      if (!component) {
         finish(
           reject,
           new Error(`In-app tool ${tool.id} loaded without registering a component.`),
@@ -115,7 +105,7 @@ function loadInAppToolScript(tool) {
         );
         return;
       }
-      finish(resolve, registration.component);
+      finish(resolve, component);
     });
     script.addEventListener("error", () => {
       finish(
@@ -136,17 +126,9 @@ function loadInAppToolScript(tool) {
 }
 
 export async function loadInAppTool(tool) {
-  if (
-    tool?.ui?.kind !== "in_app" ||
-    !["same_tab", "new_tab"].includes(tool.ui.open_mode) ||
-    tool.ui.sdk_version !== TOOL_SDK_VERSION
-  ) {
-    throw new Error("This tool requires an unsupported frontend integration.");
-  }
-
-  const registration = registeredInAppTools.get(tool.id);
-  if (registration) {
-    return registration.component;
+  const component = registeredInAppTools.get(tool.id);
+  if (component) {
+    return component;
   }
 
   if (!inAppToolLoads.has(tool.id)) {
@@ -159,7 +141,7 @@ export async function loadInAppTool(tool) {
   return inAppToolLoads.get(tool.id);
 }
 
-export function installDatalabToolSdk(router) {
+export function installToolSdk(router) {
   if (publicSdk) {
     return publicSdk;
   }
@@ -185,24 +167,19 @@ export function installDatalabToolSdk(router) {
       const query = router.currentRoute.value.query;
       const actionId = normalizeQueryValues(query.action, 1)[0] || null;
       return Object.freeze({
-        actionId: actionId && TOOL_ACTION_ID_PATTERN.test(actionId) ? actionId : null,
+        actionId,
         itemRefcodes: Object.freeze(normalizeQueryValues(query.items, MAX_SELECTED_ITEM_REFCODES)),
       });
     },
     replaceItemRefcodes: (refcodes) => {
-      const route = router.currentRoute.value;
-      const query = { ...route.query };
+      const query = { ...router.currentRoute.value.query };
       const normalized = normalizeQueryValues(refcodes, MAX_SELECTED_ITEM_REFCODES);
       if (normalized.length) {
         query.items = normalized;
       } else {
         delete query.items;
       }
-      return router.replace({
-        name: route.name,
-        params: route.params,
-        query,
-      });
+      return router.replace({ query });
     },
   });
   const dialogs = Object.freeze({
@@ -213,7 +190,7 @@ export function installDatalabToolSdk(router) {
 
   publicSdk = Object.freeze({
     version: TOOL_SDK_VERSION,
-    vue: Vue,
+    runtime: Vue,
     components,
     api,
     navigation,
@@ -223,12 +200,12 @@ export function installDatalabToolSdk(router) {
   });
 
   if (
-    Object.prototype.hasOwnProperty.call(window, "DatalabToolSDK") &&
-    window.DatalabToolSDK !== publicSdk
+    Object.prototype.hasOwnProperty.call(window, "datalabToolSdk") &&
+    window.datalabToolSdk !== publicSdk
   ) {
     throw new Error("The datalab tool SDK global is already defined.");
   }
-  Object.defineProperty(window, "DatalabToolSDK", {
+  Object.defineProperty(window, "datalabToolSdk", {
     configurable: false,
     enumerable: false,
     writable: false,

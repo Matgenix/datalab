@@ -1,46 +1,35 @@
-# This file was edited with the assistance of an AI model and requires human review from the contributor.
 _min_copier_version: "9.0"
 _subdirectory: template
 _templates_suffix: .jinja
 _answers_file: .copier-answers.yml
 
-project_name:
+tool_name:
   type: str
-  help: Human-readable package name
-  default: datalab Example Tool
+  help: Name shown in the datalab Tools catalog
+  default: Example tool
+  validator: >-
+    {% if not tool_name | trim %}
+    Enter a non-empty tool name.
+    {% endif %}
 
 distribution_name:
   type: str
   help: Python distribution name
-  default: "{{ project_name | lower | replace(' ', '-') | replace('_', '-') }}"
+  default: "datalab-{{ tool_name | lower | replace(' ', '-') | replace('_', '-') }}"
   validator: >-
     {% if not (distribution_name | regex_search('^[a-z0-9]+(?:-[a-z0-9]+)*$')) %}
     Use lowercase letters, numbers, and single hyphens; start and end with a
     letter or number.
     {% endif %}
 
-package_name:
-  type: str
-  help: Importable Python package name
-  default: "{{ distribution_name | replace('-', '_') }}"
-  validator: >-
-    {% if not (package_name | regex_search('^[a-z][a-z0-9_]*$')) %}
-    Use a lowercase Python identifier that starts with a letter.
-    {% endif %}
-
 tool_id:
   type: str
   help: Lowercase, hyphenated tool ID; it must also be the entry-point name
-  default: "{{ distribution_name | replace('datalab-tool-', '') }}"
+  default: "{{ tool_name | lower | replace(' ', '-') | replace('_', '-') }}"
   validator: >-
     {% if not (tool_id | regex_search('^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')) %}
     Use lowercase letters, numbers, and single hyphens; start with a letter.
     {% endif %}
-
-tool_name:
-  type: str
-  help: Name shown in the datalab Tools catalog
-  default: "{{ project_name }}"
 
 tool_ui_kind:
   type: str
@@ -128,15 +117,6 @@ description:
   default: >-
     {% if tool_ui_kind == "in-app" %}An in-app tool for datalab{% else %}A
     standalone tool for datalab{% endif %}
-
-provider_class:
-  type: str
-  help: ToolProvider subclass name
-  default: ExampleToolProvider
-  validator: >-
-    {% if not (provider_class | regex_search('^[A-Z][A-Za-z0-9]*$')) %}
-    Use a PascalCase Python class name.
-    {% endif %}
 
 author_name:
   type: str

@@ -4,8 +4,8 @@
 
 Minimal *standalone tool* plugin. It opens in a new tab, exchanges a *launch code*,
 and prints one datalab-backed message. datalab automatically protects its
-*provider blueprint* with the active *browser session*; the resulting tool access
-token accesses *samples* through the normal *permission-aware API*.
+*provider blueprint* with the active *browser session*; the resulting *tool access
+token* accesses *samples* through the normal *permission-aware API*.
 
 ## Local installation
 

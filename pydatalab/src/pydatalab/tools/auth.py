@@ -1,11 +1,10 @@
 """Shared authentication helpers for tool launches and provider routes."""
 
-from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 from flask import request
 
-from pydatalab.config import CONFIG
+from pydatalab.config import CONFIG, is_loopback_host
 
 
 def _normalized_origin(value: str) -> tuple[str, str, int] | None:
@@ -30,22 +29,14 @@ def _normalized_origin(value: str) -> tuple[str, str, int] | None:
 
 
 def _is_loopback_origin(origin: tuple[str, str, int] | None) -> bool:
-    if origin is None:
-        return False
-    hostname = origin[1]
-    if hostname == "localhost" or hostname.endswith(".localhost"):
-        return True
-    try:
-        return ip_address(hostname).is_loopback
-    except ValueError:
-        return False
+    return origin is not None and is_loopback_host(origin[1])
 
 
-def request_origin_is_allowed(*, require_origin: bool = False) -> bool:
+def request_origin_is_allowed() -> bool:
     """Return whether the request origin is trusted by this datalab deployment."""
     supplied_origin = request.headers.get("Origin")
     if supplied_origin is None:
-        return not require_origin
+        return False
 
     origin = _normalized_origin(supplied_origin)
     request_origin = _normalized_origin(request.host_url)

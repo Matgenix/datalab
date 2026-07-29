@@ -1,13 +1,7 @@
-<!-- This file was edited with the assistance of an AI model and requires human review from the contributor. -->
 <template>
   <section class="datalab-tool-{{ tool_id }} container py-4">
     <h1 class="h2">{{ tool_name | e }}</h1>
-    <p v-if="isLoading">Loading...</p>
-    <p v-else-if="error" class="text-danger">Error: <span v-text="error"></span></p>
-    <p v-else>
-      Hello <span v-text="displayName"></span>. You can access
-      <span v-text="sampleCount"></span> sample(s).
-    </p>{% if add_item_table_action %}
+    <p v-text="message"></p>{% if add_item_table_action %}
     <p v-if="selectedItemRefcodes.length">
       This tool was opened with
       <span v-text="selectedItemRefcodes.length"></span> selected item(s).
@@ -16,16 +10,13 @@
 </template>
 
 <script>
-const sdk = window.DatalabToolSDK;
+const sdk = window.datalabToolSdk;
 
 export default {
   name: "DatalabToolView",
   data() {
     return {
-      error: null,
-      isLoading: true,
-      displayName: "datalab user",
-      sampleCount: 0,{% if add_item_table_action %}
+      message: "Loading...",{% if add_item_table_action %}
       selectedItemRefcodes: sdk.selection.current().itemRefcodes,{% endif %}
     };
   },
@@ -39,15 +30,16 @@ export default {
           sdk.api.get("/get-current-user/"),
           sdk.api.get("/samples/"),
         ]);
-        this.displayName =
-          currentUser?.display_name || currentUser?.immutable_id || "datalab user";
-        this.sampleCount = Array.isArray(sampleResponse?.samples)
+        const name =
+          currentUser?.display_name ||
+          currentUser?.immutable_id ||
+          "datalab user";
+        const sampleCount = Array.isArray(sampleResponse?.samples)
           ? sampleResponse.samples.length
           : 0;
+        this.message = `Hello ${name}. You can access ${sampleCount} sample(s).`;
       } catch (error) {
-        this.error = error instanceof Error ? error.message : String(error);
-      } finally {
-        this.isLoading = false;
+        this.message = `Error: ${error instanceof Error ? error.message : String(error)}`;
       }
     },
   },

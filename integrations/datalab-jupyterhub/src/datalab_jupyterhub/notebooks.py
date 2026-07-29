@@ -12,13 +12,12 @@ _BANNER_PATH = Path.home() / ".local" / "share" / "datalab-jupyterhub" / "banner
 def _is_blank_notebook(notebook: Any) -> bool:
     """Return whether a new notebook contains no user content."""
 
-    for cell in notebook.get("cells", []):
-        source = cell.get("source", "")
-        if isinstance(source, list):
-            source = "".join(source)
-        if str(source).strip() or cell.get("outputs") or cell.get("attachments"):
-            return False
-    return True
+    return all(
+        not str(cell.get("source", "")).strip()
+        and not cell.get("outputs")
+        and not cell.get("attachments")
+        for cell in notebook.get("cells", [])
+    )
 
 
 def add_datalab_banner(model: dict[str, Any], path: str, contents_manager: Any) -> None:

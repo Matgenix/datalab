@@ -1,4 +1,3 @@
-<!-- This file was edited with the assistance of an AI model and requires human review from the contributor. -->
 # Tools
 
 **Terms used:** [*Browser session*](tools-glossary.md#browser-session), [*In-app tool*](tools-glossary.md#in-app-tool), [*Item*](tools-glossary.md#item), [*Open mode*](tools-glossary.md#open-mode), [*Standalone tool*](tools-glossary.md#standalone-tool), [*Tool access token*](tools-glossary.md#tool-access-token), [*Tool launch grant*](tools-glossary.md#tool-launch-grant), [*Tool plugin*](tools-glossary.md#tool-plugin), [*Tool provider*](tools-glossary.md#tool-provider).
@@ -72,7 +71,7 @@ Flask blueprint. One policy applies to the entire blueprint:
 
 This *route authentication* determines who may enter a route; it does not add
 *item* filters to arbitrary plugin code. *In-app tools* should use
-`DatalabToolSDK.api`, and *standalone tools* should use their *tool access token*
+`window.datalabToolSdk.api`, and *standalone tools* should use their *tool access token*
 against normal datalab API endpoints. Those endpoints apply the existing
 *current-user permissions*. A custom backend route that queries MongoDB directly
 must explicitly use permission-aware datalab services or
@@ -183,8 +182,7 @@ docker compose --profile prod --profile jupyterhub up --build --wait
 docker compose --profile dev --profile jupyterhub up --build --wait
 ```
 
-The *JupyterHub* service has the fixed profile `jupyterhub`; there are no generated
-profiles such as `prod-external`.
+The *JupyterHub* service uses the fixed `jupyterhub` profile.
 The production and development profiles are alternatives and are not intended
 to run simultaneously.
 The managed *Hub* service reads `.docker/jupyterhub/.env` through its Compose
@@ -199,12 +197,6 @@ interpolation such as published ports; customize those values from the shell
 only when needed.
 Outside Compose, enabling Jupyter without `EXTERNAL_URL` does not start a
 process: the deployer must run a compatible *Hub* at the configured public URL.
-
-Conditional logic does not run in the container entrypoint.
-An entrypoint no-op would still create an exited or dummy service, interact
-poorly with restart policies, and make `docker compose up --wait` misleading.
-When a local replica exists, its entrypoint always starts a real *JupyterHub* and
-its healthcheck represents the real service.
 
 Docker Compose 2.20 or newer is required for the optional
 `depends_on.required: false` relationship used with the optional *Hub* profile.
@@ -284,34 +276,16 @@ volume-retention/removal policy appropriate to their environment.
 
 **Terms used:** [*Client ID*](tools-glossary.md#client-id), [*Client secret*](tools-glossary.md#client-secret), [*datalab API URL*](tools-glossary.md#datalab-api-url), [*Delegated tool session*](tools-glossary.md#delegated-tool-session), [*DockerSpawner*](tools-glossary.md#dockerspawner), [*External JupyterHub*](tools-glossary.md#external-jupyterhub), [*Hub*](tools-glossary.md#hub), [*JupyterHub*](tools-glossary.md#jupyterhub), [*Permanent API key*](tools-glossary.md#permanent-api-key), [*Tool access token*](tools-glossary.md#tool-access-token).
 
-With `ENABLED=true` and `EXTERNAL_URL` set, the datalab API returns that *Hub*'s
-login URL. Do not include the `jupyterhub` Compose profile in that deployment.
-The external administrator owns TLS, proxying, availability, upgrades,
-spawning, resource limits, culling, and per-user persistent storage.
+With `ENABLED=true` and `EXTERNAL_URL` set, datalab launches that *Hub* and the
+local `jupyterhub` Compose profile is not needed. The external administrator
+owns TLS, proxying, availability, spawning, storage, quotas, and lifecycle.
 
-Install the compatible `datalab-jupyterhub` integration package in the *Hub* and
-configure its `DatalabAuthenticator` with:
-
-- a server-reachable *datalab API URL*;
-- the same *client ID* and 32-character-or-longer *client secret* configured in
-  datalab;
-- persistent encrypted `auth_state`, with a persistent
-  `JUPYTERHUB_CRYPT_KEY`; and
-- dynamic user creation rather than a pre-provisioned user list.
-
-The single-user image must contain `datalab-api` and the integration bootstrap.
-Use `datalab-jupyter-singleuser` as the spawner command to install the
-*IPython startup file* and create the welcome notebook before JupyterLab starts.
-Installing the integration package also enables its Jupyter Server
-*notebook save hook*, which supplies the *new-notebook banner*.
-The spawner may be *DockerSpawner*, KubeSpawner, or another implementation, but
-it must isolate each user's storage and inject only that user's *delegated tool
-session* state.
-
-*tool access tokens* last at most 24 hours.
-Keep external user servers within that lifetime and require the user to launch
-again after expiry; do not replace the *tool access token* with a permanent
-API key.
+Install and configure the
+[`datalab-jupyterhub` integration](../../integrations/datalab-jupyterhub/README.md)
+with the matching *client ID* and *client secret*. Its README is the source of
+truth for external-Hub authenticator and single-user-image setup. External user
+servers must remain isolated and within the 24-hour *tool access token*
+lifetime.
 
 ## Writing a tool plugin
 
@@ -323,12 +297,15 @@ Generate a package from the in-repository *Copier* template:
 uvx copier copy templates/datalab-tool-plugin-template ../my-datalab-tool
 ```
 
+The template asks for the catalog name, provider ID, and Python distribution
+name. It derives the package module and provider class names from those values.
+
 *Copier* asks for the UI kind:
 
 - `standalone` generates a protected standalone page, *launch code exchange*,
   and API example using a *tool access token*; and
 - `in-app` generates a protected in-app provider plus a small Vite project
-  containing `ToolView.vue`, SDK registration, and prefixed CSS.
+  containing `ToolView.vue` and SDK registration.
 
 For an in-app plugin, *Copier* can optionally add one
 *table-selection tool action*. When enabled, it asks for the action label,
@@ -343,7 +320,7 @@ The package registers a zero-argument `ToolProvider` subclass:
 
 ```toml
 [project.entry-points."pydatalab.tools"]
-example-tool = "example_tool:ExampleToolProvider"
+example-tool = "example_tool.provider:ExampleToolProvider"
 ```
 
 The entry-point name must equal the provider's lowercase, hyphenated `id`.
@@ -375,7 +352,7 @@ An in-app provider may declare a *tool launch action* for selected rows:
 metadata = ToolMetadata(
     name="Example comparison",
     description="Compare selected items.",
-    ui=InAppToolUI(entrypoint="frontend/tool.js", sdk_version=1),
+    ui=InAppToolUI(),
     launch_actions=(
         ItemTableSelectionAction(
             id="compare-selected",
@@ -433,14 +410,12 @@ The standalone *Copier* variant generates this form:
 metadata = ToolMetadata(
     name="Example tool",
     description="A separate application.",
-    ui=StandaloneToolUI(open_mode="new_tab"),
+    ui=StandaloneToolUI(),
 )
 
 def launch(self, context, grants):
     code = grants.issue("example-tool")
-    return ToolLaunchResult(
-        url=f"https://tool.example/#datalab_launch_code={code}",
-    )
+    return f"https://tool.example/#datalab_launch_code={code}"
 ```
 
 The browser validates the returned HTTP(S) URL and opens it in a new tab.
@@ -470,16 +445,9 @@ version it was built against:
 metadata = ToolMetadata(
     name="Example comparison",
     description="Compare data without leaving datalab.",
-    ui=InAppToolUI(
-        open_mode="same_tab",
-        entrypoint="frontend/tool.js",
-        sdk_version=1,
-    ),
+    ui=InAppToolUI(),
 )
 blueprint = TOOL_BLUEPRINT
-
-def launch(self, context, grants):
-    return ToolLaunchResult()
 ```
 
 *In-app tool* providers must have a blueprint, and the entrypoint must be a
@@ -494,11 +462,7 @@ rejected. The webapp loads bundles only from:
 The bundle synchronously registers its component:
 
 ```javascript
-window.DatalabToolSDK.register({
-  id: "example-comparison",
-  sdkVersion: 1,
-  component: ExampleComparison,
-});
+window.datalabToolSdk.register(ExampleComparison);
 ```
 
 SDK version 1 exposes the host Vue runtime, selected datalab components,
@@ -511,10 +475,10 @@ The in-app tool loader checks the requested *provider ID*, SDK version, provider
 namespace, registration, and load timeout. These checks prevent accidental
 misconfiguration; they are not a sandbox for an untrusted plugin.
 
-The in-app *Copier* variant builds `frontend/src/main.js`,
-`frontend/src/ToolView.vue`, and its CSS into the one classic
+The in-app *Copier* variant builds `frontend/src/main.js` and
+`frontend/src/ToolView.vue` into the one classic
 `static/frontend/tool.js` bundle expected by the loader. Vue is externalized to
-`window.DatalabToolSDK.vue`; the plugin must not ship a second runtime.
+`window.datalabToolSdk.runtime`; the plugin must not ship a second runtime.
 The stylesheet is embedded into the JavaScript bundle and scoped below a
 tool-specific root class.
 
@@ -530,8 +494,8 @@ and lockfile for that review; its wheel contains the compiled browser asset.
 
 **Terms used:** [*Comparison tool plugin*](tools-glossary.md#comparison-tool-plugin), [*Item refcode*](tools-glossary.md#item-refcode), [*Table-selection tool action*](tools-glossary.md#table-selection-tool-action), [*Tool frontend SDK*](tools-glossary.md#tool-frontend-sdk), [*Tool plugin*](tools-glossary.md#tool-plugin).
 
-`plugin_examples/comparison_tool` converts the earlier cross-sample work into
-the independently installable *comparison tool plugin*. It renders inside
+`plugin_examples/comparison_tool` is an independently installable
+*comparison tool plugin*. It renders inside
 datalab and declares **Compare selected** for Samples, Inventory, and items
 within a collection. It deliberately does not contribute the action to
 Equipment.

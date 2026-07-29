@@ -1,6 +1,7 @@
+__pycache__/
 *.egg-info/
+*.py[cod]
+.venv/
 build/
 dist/
 frontend/node_modules/
-__pycache__/
-*.pyc

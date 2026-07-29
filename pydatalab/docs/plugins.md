@@ -1,4 +1,3 @@
-<!-- This file was edited with the assistance of an AI model and requires human review from the contributor. -->
 # Plugins
 
 **Terms used:** [*Data block*](tools-glossary.md#data-block), [*In-app tool*](tools-glossary.md#in-app-tool), [*Standalone tool*](tools-glossary.md#standalone-tool).

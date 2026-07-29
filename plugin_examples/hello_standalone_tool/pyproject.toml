@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.entry-points."pydatalab.tools"]
-"hello-standalone" = "datalab_hello_standalone_tool:HelloStandaloneToolProvider"
+"hello-standalone" = "datalab_hello_standalone_tool.provider:HelloStandaloneToolProvider"
 
 [build-system]
 requires = ["setuptools>=77", "wheel"]

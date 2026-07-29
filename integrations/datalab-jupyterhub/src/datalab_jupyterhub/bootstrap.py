@@ -38,7 +38,6 @@ def bootstrap() -> None:
         return
     target.parent.mkdir(parents=True, exist_ok=True)
     notebook = nbformat.v4.new_notebook(
-        metadata={"datalab_welcome_version": 1},
         cells=[
             nbformat.v4.new_markdown_cell(
                 "# Welcome to datalab\n\n"
@@ -58,12 +57,6 @@ def bootstrap() -> None:
         ],
     )
     nbformat.write(notebook, target)
-
-
-def bootstrap_main() -> None:
-    """Console entry point for installing the single-user bootstrap assets."""
-
-    bootstrap()
 
 
 def singleuser_main() -> None:

@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.entry-points."pydatalab.tools"]
-"hello-in-app" = "datalab_hello_in_app_tool:HelloInAppToolProvider"
+"hello-in-app" = "datalab_hello_in_app_tool.provider:HelloInAppToolProvider"
 
 [build-system]
 requires = ["setuptools>=77", "wheel"]

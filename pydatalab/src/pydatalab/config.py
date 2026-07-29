@@ -30,12 +30,13 @@ __all__ = (
     "RemoteFilesystem",
     "ToolsSettings",
     "JupyterToolSettings",
+    "is_loopback_host",
 )
 
 config_logger = logging.getLogger("pydatalab.config")
 
 
-def _is_loopback_host(host: str | None) -> bool:
+def is_loopback_host(host: str | None) -> bool:
     """Return whether a URL host is explicitly local to this machine."""
     if host is None:
         return False
@@ -150,7 +151,16 @@ class SMTPSettings(BaseModel):
     )
 
 
-class JupyterToolSettings(BaseModel):
+class _NestedSettings(BaseModel):
+    """Base model for settings populated by Pydantic's nested environment parser."""
+
+    class Config:
+        alias_generator = str.lower
+        allow_population_by_field_name = True
+        extra = "forbid"
+
+
+class JupyterToolSettings(_NestedSettings):
     """Configuration for the built-in JupyterLab tool."""
 
     ENABLED: bool = Field(
@@ -173,22 +183,6 @@ class JupyterToolSettings(BaseModel):
         None,
         description="Shared secret used when JupyterHub exchanges launch grants.",
     )
-
-    @root_validator(pre=True)
-    def normalize_environment_keys(cls, values):
-        """Map lower-case keys produced by Pydantic's nested environment parser."""
-        values = dict(values or {})
-        for field_name in (
-            "ENABLED",
-            "EXTERNAL_URL",
-            "PUBLIC_URL",
-            "CLIENT_ID",
-            "CLIENT_SECRET",
-        ):
-            environment_key = field_name.lower()
-            if field_name not in values and environment_key in values:
-                values[field_name] = values.pop(environment_key)
-        return values
 
     @validator("EXTERNAL_URL", "PUBLIC_URL", pre=True)
     def empty_urls_are_unset(cls, value):
@@ -217,25 +211,25 @@ class JupyterToolSettings(BaseModel):
             raise ValueError("Jupyter CLIENT_ID must not be empty")
         return value.strip()
 
+    def browser_url(self, app_url: str | None) -> str:
+        """Return the browser-facing JupyterHub URL for this deployment."""
+        if self.EXTERNAL_URL is not None:
+            return str(self.EXTERNAL_URL)
+        if self.PUBLIC_URL is not None:
+            return str(self.PUBLIC_URL)
+        if app_url:
+            return f"{app_url.rstrip('/')}/jupyter/"
+        return "http://localhost:8000/jupyter/"
 
-class ToolsSettings(BaseModel):
-    """Configuration for built-in and installed standalone tools."""
+
+class ToolsSettings(_NestedSettings):
+    """Configuration for built-in and installed tools."""
 
     JUPYTER: JupyterToolSettings = Field(default_factory=JupyterToolSettings)
     DISABLED: set[str] = Field(
         default_factory=set,
         description="Installed tool plugin IDs disabled for this deployment.",
     )
-
-    @root_validator(pre=True)
-    def normalize_environment_keys(cls, values):
-        """Map known lower-case keys while retaining provider-owned settings."""
-        values = dict(values or {})
-        for field_name in ("JUPYTER", "DISABLED"):
-            environment_key = field_name.lower()
-            if field_name not in values and environment_key in values:
-                values[field_name] = values.pop(environment_key)
-        return values
 
     @validator("DISABLED", pre=True)
     def parse_disabled_tool_ids(cls, value):
@@ -247,9 +241,6 @@ class ToolsSettings(BaseModel):
                 return set()
             value = json.loads(value)
         return value
-
-    class Config:
-        extra = "allow"
 
 
 class ServerConfig(BaseSettings):
@@ -384,7 +375,7 @@ its importance when deploying a datalab instance.""",
 
     TOOLS: ToolsSettings = Field(
         default_factory=ToolsSettings,
-        description="Configuration for built-in and installed standalone tools.",
+        description="Configuration for built-in and installed tools.",
     )
 
     BACKUP_STRATEGIES: dict[str, BackupStrategy] | None = Field(
@@ -498,13 +489,7 @@ its importance when deploying a datalab instance.""",
                 "and must not start or end with whitespace"
             )
 
-        browser_url = jupyter.EXTERNAL_URL or jupyter.PUBLIC_URL
-        if browser_url is None and values.get("APP_URL"):
-            browser_url = f"{str(values['APP_URL']).rstrip('/')}/jupyter/"
-        if browser_url is None:
-            browser_url = "http://localhost:8000/jupyter/"
-
-        parsed_browser_url = urlsplit(str(browser_url))
+        parsed_browser_url = urlsplit(jupyter.browser_url(values.get("APP_URL")))
         if (
             parsed_browser_url.scheme not in {"http", "https"}
             or parsed_browser_url.hostname is None
@@ -517,7 +502,7 @@ its importance when deploying a datalab instance.""",
         if (
             parsed_browser_url.scheme != "https"
             and not values.get("TESTING")
-            and not _is_loopback_host(parsed_browser_url.hostname)
+            and not is_loopback_host(parsed_browser_url.hostname)
         ):
             raise ValueError(
                 "The browser-facing Jupyter URL must use HTTPS unless it targets "

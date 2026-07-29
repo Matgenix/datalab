@@ -1,4 +1,3 @@
-// This file was edited with the assistance of an AI model and requires human review from the contributor.
 import { launchTool } from "@/server_fetch_utils.js";
 
 const ITEM_TABLE_IDS = Object.freeze({
@@ -37,7 +36,8 @@ export function isSupportedTool(tool) {
     (tool?.ui?.kind === "in_app" &&
       ["same_tab", "new_tab"].includes(tool.ui.open_mode) &&
       tool.ui.sdk_version === 1 &&
-      typeof tool.ui.entrypoint === "string")
+      typeof tool.ui.entrypoint === "string" &&
+      tool.ui.entrypoint.length > 0)
   );
 }
 
@@ -71,8 +71,14 @@ export async function openTool(tool, router, query = undefined) {
       return;
     }
 
-    const launchWindow = openToolPlaceholderTab();
-    launchWindow.location.replace(new URL(router.resolve(route).href, window.location.origin).href);
+    const url = new URL(router.resolve(route).href, window.location.origin).href;
+    const launchWindow = window.open(url, "_blank");
+    if (!launchWindow) {
+      throw new Error(
+        "The new tab was blocked by your browser. Allow pop-ups for this site and try again.",
+      );
+    }
+    launchWindow.opener = null;
     return;
   }
 

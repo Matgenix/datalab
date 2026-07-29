@@ -26,11 +26,8 @@ network_name = required_environment("PYDATALAB_JUPYTERHUB_DOCKER_NETWORK")
 volume_prefix = required_environment("PYDATALAB_JUPYTERHUB_VOLUME_PREFIX")
 client_secret = required_environment("PYDATALAB_TOOLS__JUPYTER__CLIENT_SECRET")
 if not os.environ.get("JUPYTERHUB_CRYPT_KEY", "").strip():
-    crypt_key = os.environ.get("PYDATALAB_JUPYTERHUB_CRYPT_KEY", "").strip()
-    if not crypt_key:
-        key_material = f"datalab-jupyterhub-auth-state:{client_secret}".encode()
-        crypt_key = hashlib.sha256(key_material).hexdigest()
-    os.environ["JUPYTERHUB_CRYPT_KEY"] = crypt_key
+    key_material = f"datalab-jupyterhub-auth-state:{client_secret}".encode()
+    os.environ["JUPYTERHUB_CRYPT_KEY"] = hashlib.sha256(key_material).hexdigest()
 
 c.JupyterHub.authenticator_class = DatalabAuthenticator
 c.DatalabAuthenticator.api_url = required_environment("PYDATALAB_JUPYTERHUB_API_URL")
@@ -41,9 +38,7 @@ c.DatalabAuthenticator.client_secret = client_secret
 c.DatalabAuthenticator.allow_all = True
 c.DatalabAuthenticator.auto_login = True
 c.DatalabAuthenticator.enable_auth_state = True
-c.DatalabAuthenticator.auth_refresh_age = 0
 
-c.JupyterHub.base_url = base_url
 c.JupyterHub.bind_url = f"http://0.0.0.0:8000{base_url}"
 c.JupyterHub.hub_ip = "0.0.0.0"
 c.JupyterHub.hub_connect_ip = os.environ.get(
@@ -51,8 +46,6 @@ c.JupyterHub.hub_connect_ip = os.environ.get(
 )
 c.JupyterHub.cookie_secret_file = "/srv/jupyterhub/jupyterhub_cookie_secret"
 c.JupyterHub.db_url = "sqlite:////srv/jupyterhub/jupyterhub.sqlite"
-c.JupyterHub.cleanup_servers = True
-c.JupyterHub.redirect_to_server = True
 
 c.JupyterHub.spawner_class = "dockerspawner.DockerSpawner"
 c.DockerSpawner.image = required_environment("PYDATALAB_JUPYTERHUB_SINGLEUSER_IMAGE")

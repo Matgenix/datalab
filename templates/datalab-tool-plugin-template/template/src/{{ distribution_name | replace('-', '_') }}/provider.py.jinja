@@ -1,0 +1,108 @@
+"""{{ tool_name }} datalab tool provider."""
+
+{% if tool_ui_kind == "in-app" %}
+from pathlib import Path
+
+from flask import Blueprint, send_from_directory
+
+from pydatalab.tools import (
+    InAppToolUI,{% if add_item_table_action %}
+    ItemTableSelectionAction,{% endif %}
+    ToolMetadata,
+    ToolProvider,
+)
+{% else %}
+from flask import Blueprint, jsonify, request
+from flask_login import current_user
+
+from pydatalab.tools import (
+    StandaloneToolUI,
+    ToolContext,
+    ToolLaunchGrantIssuer,
+    ToolMetadata,
+    ToolProvider,
+    exchange_launch_code,
+)
+{% endif %}
+
+TOOL_ID = {{ tool_id | tojson }}
+{% if tool_ui_kind == "in-app" %}
+TOOL_BLUEPRINT = Blueprint({{ distribution_name | replace('-', '_') | tojson }}, __name__)
+FRONTEND_DIRECTORY = Path(__file__).parent / "static" / "frontend"
+
+
+@TOOL_BLUEPRINT.get("/frontend/tool.js")
+def frontend_entrypoint():
+    """Serve the compiled in-app tool bundle."""
+    response = send_from_directory(FRONTEND_DIRECTORY, "tool.js")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+{% else %}
+TOOL_BLUEPRINT = Blueprint(
+    {{ distribution_name | replace('-', '_') | tojson }},
+    __name__,
+    static_folder="static",
+    static_url_path="",
+)
+
+
+@TOOL_BLUEPRINT.post("/exchange")
+def exchange():
+    """Exchange this user's launch code for a tool access token."""
+    payload = request.get_json(silent=True) or {}
+    code = payload.get("code")
+    if not isinstance(code, str) or not code:
+        return jsonify({"error": "A launch code is required"}), 400
+
+    result = exchange_launch_code(
+        code,
+        TOOL_ID,
+        TOOL_ID,
+        expected_user_id=str(current_user.person.immutable_id),
+    )
+    if result is None:
+        return jsonify({"error": "Invalid or expired launch code"}), 400
+
+    response = jsonify({"tool_access_token": result.tool_session.tool_access_token})
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+{% endif %}
+
+
+class {{ (tool_id[:-5] if tool_id.endswith('-tool') else tool_id) | replace('-', ' ') | title | replace(' ', '') }}ToolProvider(ToolProvider):
+    """Provide {{ tool_name }} through datalab's Tools catalog."""
+
+    id = TOOL_ID
+    metadata = ToolMetadata(
+        name={{ tool_name | tojson }},
+        description={{ description | tojson }},
+        version="0.1.0",
+        icon="laptop-code",
+        ui={% if tool_ui_kind == "in-app" %}InAppToolUI({% if tool_open_mode != "same_tab" %}open_mode={{ tool_open_mode | tojson }}{% endif %}){% else %}StandaloneToolUI({% if tool_open_mode != "new_tab" %}open_mode={{ tool_open_mode | tojson }}{% endif %}){% endif %},{% if tool_ui_kind == "in-app" and add_item_table_action %}
+        launch_actions=(
+            ItemTableSelectionAction(
+                id={{ item_table_action_id | tojson }},
+                label={{ item_table_action_label | tojson }},
+                tables={{ item_table_action_tables | tojson }},
+                min_items={{ item_table_action_min_items }},
+                max_items={{ item_table_action_max_items }},
+            ),
+        ),{% endif %}
+    )
+    blueprint = TOOL_BLUEPRINT
+{% if tool_ui_kind == "standalone" %}
+
+    def launch(
+        self,
+        context: ToolContext,
+        grants: ToolLaunchGrantIssuer,
+    ) -> str:
+        """Issue a launch grant and return the standalone page URL."""
+        del context
+        code = grants.issue(TOOL_ID)
+        api_prefix = request.path.rsplit("/tools/", maxsplit=1)[0]
+        plugin_path = f"{api_prefix}/tools/plugins/{self.id}/"
+        base_url = f"{request.host_url.rstrip('/')}{plugin_path}"
+        return f"{base_url}index.html#datalab_launch_code={code}"
+{% endif %}

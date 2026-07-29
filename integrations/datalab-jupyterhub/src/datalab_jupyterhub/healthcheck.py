@@ -9,6 +9,5 @@ def main() -> None:
     """Fail unless the local Hub health endpoint responds successfully."""
 
     url = f"http://localhost:8000{configured_base_url()}hub/health"
-    with urlopen(url, timeout=5) as response:  # noqa: S310 - fixed localhost endpoint
-        if response.status >= 400:
-            raise RuntimeError(f"JupyterHub healthcheck returned {response.status}")
+    with urlopen(url, timeout=5):  # noqa: S310 - fixed localhost endpoint
+        pass

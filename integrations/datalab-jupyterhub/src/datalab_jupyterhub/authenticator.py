@@ -12,6 +12,8 @@ from jupyterhub.utils import url_path_join
 from tornado import web
 from traitlets import Unicode
 
+EXCHANGE_PATH = "/v0.1/tools/plugins/jupyter/exchange"
+
 
 def _expiration(value: str) -> datetime:
     """Parse a timezone-aware delegated tool session expiration timestamp."""
@@ -52,7 +54,6 @@ class DatalabLoginHandler(LoginHandler):
             ]
         )
         self.request.uri = urlunsplit(("", "", parts.path, safe_query, ""))
-        self.request.query = safe_query
         self.set_header("Cache-Control", "no-store")
         self.set_header("Referrer-Policy", "no-referrer")
 
@@ -66,11 +67,6 @@ class DatalabAuthenticator(Authenticator):
     """Exchange a datalab launch code for a tool access token."""
 
     api_url = Unicode(config=True, help="Internal datalab API URL.")
-    exchange_path = Unicode(
-        "/v0.1/tools/plugins/jupyter/exchange",
-        config=True,
-        help="Plugin-owned endpoint that consumes a Jupyter launch code.",
-    )
     client_id = Unicode(config=True, help="JupyterHub integration client identifier.")
     client_secret = Unicode(config=True, help="JupyterHub integration client secret.")
 
@@ -89,15 +85,11 @@ class DatalabAuthenticator(Authenticator):
     ) -> dict[str, Any] | None:
         """Exchange a launch code for datalab identity and a delegated tool session."""
 
-        code = (
-            getattr(handler, "_datalab_launch_code", None)
-            or handler.get_argument("datalab_launch_code", None)
-            or ""
-        ).strip()
+        code = (getattr(handler, "_datalab_launch_code", None) or "").strip()
         if not code:
             return None
 
-        exchange_url = f"{self.api_url.rstrip('/')}/{self.exchange_path.lstrip('/')}"
+        exchange_url = f"{self.api_url.rstrip('/')}/{EXCHANGE_PATH.lstrip('/')}"
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
@@ -130,7 +122,6 @@ class DatalabAuthenticator(Authenticator):
 
         required_fields = {
             "user_id",
-            "username",
             "display_name",
             "role",
             "group_ids",
@@ -144,7 +135,7 @@ class DatalabAuthenticator(Authenticator):
             )
 
         user_id = payload["user_id"]
-        username = payload["username"]
+        username = f"datalab-{user_id}"
         tool_access_token = payload["tool_access_token"]
         role = payload["role"]
         display_name = payload["display_name"]
@@ -153,8 +144,6 @@ class DatalabAuthenticator(Authenticator):
         if (
             not isinstance(user_id, str)
             or not user_id
-            or not isinstance(username, str)
-            or username != f"datalab-{user_id}"
             or not isinstance(tool_access_token, str)
             or not tool_access_token
             or not isinstance(role, str)
@@ -172,7 +161,7 @@ class DatalabAuthenticator(Authenticator):
         except ValueError as exc:
             raise web.HTTPError(502, "datalab returned an invalid expiration") from exc
 
-        api_url = str(payload.get("api_url") or self.api_url).rstrip("/")
+        api_url = self.api_url.rstrip("/")
         current_user = {
             "id": user_id,
             "username": username,
@@ -188,7 +177,6 @@ class DatalabAuthenticator(Authenticator):
                 "api_url": api_url,
                 "current_user": current_user,
                 "expires_at": expires_at,
-                "user_id": user_id,
             },
         }
 

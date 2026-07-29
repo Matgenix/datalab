@@ -19,7 +19,6 @@ dependencies = [
 datalab = "datalab_jupyterhub:DatalabAuthenticator"
 
 [project.scripts]
-datalab-jupyter-bootstrap = "datalab_jupyterhub.bootstrap:bootstrap_main"
 datalab-jupyter-healthcheck = "datalab_jupyterhub.healthcheck:main"
 datalab-jupyter-singleuser = "datalab_jupyterhub.bootstrap:singleuser_main"
 

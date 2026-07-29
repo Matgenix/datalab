@@ -23,6 +23,7 @@ import { markRaw } from "vue";
 
 import Navbar from "@/components/Navbar.vue";
 import { getTools, launchTool } from "@/server_fetch_utils.js";
+import { isSupportedTool } from "@/tool_launch_utils.js";
 import { loadInAppTool } from "@/tool_sdk.js";
 
 export default {
@@ -34,7 +35,6 @@ export default {
     return {
       isLoading: true,
       loadError: null,
-      tool: null,
       toolComponent: null,
       loadSequence: 0,
     };
@@ -59,7 +59,6 @@ export default {
       const sequence = ++this.loadSequence;
       this.isLoading = true;
       this.loadError = null;
-      this.tool = null;
       this.toolComponent = null;
 
       try {
@@ -68,7 +67,7 @@ export default {
         if (!tool) {
           throw new Error("The tool is disabled, unavailable, or not installed.");
         }
-        if (tool.ui?.kind !== "in_app" || !["same_tab", "new_tab"].includes(tool.ui.open_mode)) {
+        if (!isSupportedTool(tool) || tool.ui.kind !== "in_app") {
           throw new Error("The requested tool is not an in-app tool.");
         }
 
@@ -78,7 +77,6 @@ export default {
         if (sequence !== this.loadSequence) {
           return;
         }
-        this.tool = tool;
         this.toolComponent = markRaw(component);
         const websiteTitle = process.env.VUE_APP_WEBSITE_TITLE || "datalab";
         document.title = `${websiteTitle} - ${tool.name}`;

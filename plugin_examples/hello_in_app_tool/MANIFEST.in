@@ -1,1 +1,2 @@
-recursive-include src/datalab_hello_in_app_tool/static *.js
+graft frontend
+prune frontend/node_modules

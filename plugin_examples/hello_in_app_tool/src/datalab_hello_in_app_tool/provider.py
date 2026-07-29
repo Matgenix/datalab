@@ -6,8 +6,6 @@ from flask import Blueprint, send_from_directory
 
 from pydatalab.tools import (
     InAppToolUI,
-    ToolLaunchGrantIssuer,
-    ToolLaunchResult,
     ToolMetadata,
     ToolProvider,
 )
@@ -35,19 +33,6 @@ class HelloInAppToolProvider(ToolProvider):
         description="Print one datalab-backed message inside the web app.",
         version="0.1.0",
         icon="laptop-code",
-        ui=InAppToolUI(
-            open_mode="same_tab",
-            entrypoint="frontend/tool.js",
-            sdk_version=1,
-        ),
+        ui=InAppToolUI(),
     )
     blueprint = TOOL_BLUEPRINT
-
-    def launch(
-        self,
-        context,
-        grants: ToolLaunchGrantIssuer,
-    ) -> ToolLaunchResult:
-        """Authorize the current user before datalab loads the frontend bundle."""
-        del context, grants
-        return ToolLaunchResult()

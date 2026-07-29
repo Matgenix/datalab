@@ -1,9 +1,6 @@
-# This file was edited with the assistance of an AI model and requires human review from the contributor.
 _commit: "{{ _copier_conf.vcs_ref }}"
 _src_path: "{{ _copier_conf.src_path }}"
-project_name: {{ project_name | tojson }}
 distribution_name: {{ distribution_name | tojson }}
-package_name: {{ package_name | tojson }}
 tool_id: {{ tool_id | tojson }}
 tool_name: {{ tool_name | tojson }}
 tool_ui_kind: {{ tool_ui_kind | tojson }}
@@ -19,6 +16,5 @@ item_table_action_max_items: {{ item_table_action_max_items }}
 {% endif %}
 {% endif %}
 description: {{ description | tojson }}
-provider_class: {{ provider_class | tojson }}
 author_name: {{ author_name | tojson }}
 author_email: {{ author_email | tojson }}

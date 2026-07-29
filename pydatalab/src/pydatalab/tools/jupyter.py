@@ -1,7 +1,7 @@
 """Built-in JupyterLab tool provider and JupyterHub launch code exchange."""
 
 import hmac
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import urlencode
 
 from flask import Blueprint, abort, jsonify, request
 
@@ -11,36 +11,18 @@ from pydatalab.config import CONFIG
 from .base import (
     ToolContext,
     ToolLaunchGrantIssuer,
-    ToolLaunchResult,
     ToolMetadata,
     ToolProvider,
     ToolRouteAuth,
 )
-from .exchange import exchange_launch_code
+from .grants import exchange_launch_code
 
 JUPYTER_BLUEPRINT = Blueprint("jupyter-tool", __name__)
 
 
-def _jupyter_public_url() -> str:
-    settings = CONFIG.TOOLS.JUPYTER
-    if settings.EXTERNAL_URL is not None:
-        return str(settings.EXTERNAL_URL)
-    if settings.PUBLIC_URL is not None:
-        return str(settings.PUBLIC_URL)
-    if CONFIG.APP_URL:
-        return f"{CONFIG.APP_URL.rstrip('/')}/jupyter/"
-    return "http://localhost:8000/jupyter/"
-
-
 def _login_url(code: str) -> str:
-    login_url = urljoin(
-        f"{_jupyter_public_url().rstrip('/')}/",
-        "hub/datalab-login",
-    )
-    parts = urlsplit(login_url)
-    query = parse_qsl(parts.query, keep_blank_values=True)
-    query.append(("datalab_launch_code", code))
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+    login_url = f"{CONFIG.TOOLS.JUPYTER.browser_url(CONFIG.APP_URL).rstrip('/')}/hub/datalab-login"
+    return f"{login_url}?{urlencode({'datalab_launch_code': code})}"
 
 
 class JupyterToolProvider(ToolProvider):
@@ -84,10 +66,10 @@ class JupyterToolProvider(ToolProvider):
         self,
         context: ToolContext,
         grants: ToolLaunchGrantIssuer,
-    ) -> ToolLaunchResult:
+    ) -> str:
         settings = CONFIG.TOOLS.JUPYTER
         code = grants.issue(settings.CLIENT_ID)
-        return ToolLaunchResult(url=_login_url(code))
+        return _login_url(code)
 
 
 @JUPYTER_BLUEPRINT.route("/exchange", methods=["POST"])
@@ -109,7 +91,6 @@ def exchange_jupyter_launch_code():
     response = jsonify(
         {
             "user_id": exchange.context.user_id,
-            "username": f"datalab-{exchange.context.user_id}",
             "display_name": exchange.context.display_name,
             "role": exchange.context.role,
             "group_ids": list(exchange.context.group_ids),

@@ -391,7 +391,7 @@ function resolveToolApiPath(path) {
   const apiBase = new URL(`${API_URL.replace(/\/+$/, "")}/`, window.location.origin);
   const resolved = new URL(path.replace(/^\/+/, ""), apiBase);
   if (resolved.origin !== apiBase.origin || !resolved.pathname.startsWith(apiBase.pathname)) {
-    throw new Error("Tool API paths must remain below the configured Datalab API URL.");
+    throw new Error("Tool API paths must remain below the configured datalab API URL.");
   }
   return resolved.href;
 }
