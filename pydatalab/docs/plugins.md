@@ -237,21 +237,23 @@ data-retention policy. If it requires a callback hosted by datalab, the
 installed provider must expose that callback through a service-authenticated
 provider blueprint.
 
-### Tool plugin tutorials
+### Tool plugin development tutorials
 
 The tutorials build two deliberately small plugins:
 
-- [Standalone Hello World](tools-tutorials/standalone-hello-world.md), also
+- [Developing a standalone Tool plugin](plugin-development/standalone-tool-plugin.md),
+  also
   represented by the future
   [standalone example repository](https://github.com/Matgenix/datalab-standalone-tool-plugin-example),
   opens in a new tab and displays the signed-in user's accessible sample count.
-- [In-app Hello World](tools-tutorials/in-app-hello-world.md), also represented
-  by the future
+- [Developing an in-app Tool plugin](plugin-development/in-app-tool-plugin.md),
+  also represented by the future
   [in-app example repository](https://github.com/Matgenix/datalab-in-app-tool-plugin-example),
   renders inside datalab and displays the same small piece of API-backed data.
 
-Start with the [tutorial overview](tools-tutorials/index.md) for a side-by-side
-explanation of discovery and current-user access.
+Start with the
+[plugin development tutorial overview](plugin-development/index.md) for a
+side-by-side explanation of discovery and current-user access.
 
 ## Installing plugins
 
