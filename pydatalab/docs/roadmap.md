@@ -7,8 +7,6 @@ There are also [several issues with the 'suggestions' label](https://github.com/
 
 ## Plugin system
 
-**Terms used:** [*Data block*](tools-glossary.md#data-block), [*In-app tool*](tools-glossary.md#in-app-tool), [*Standalone tool*](tools-glossary.md#standalone-tool), [*Tool frontend SDK*](tools-glossary.md#tool-frontend-sdk), [*Tool plugin*](tools-glossary.md#tool-plugin).
-
 The plugin entry points exposed today cover *data blocks*, *standalone tools*, and
 trusted *in-app tools*; see [Plugins](plugins.md).
 Planned extensions include:

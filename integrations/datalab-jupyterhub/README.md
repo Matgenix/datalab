@@ -1,7 +1,5 @@
 # datalab-jupyterhub
 
-**Terms used:** [*Current-user snapshot*](../../pydatalab/docs/tools-glossary.md#current-user-snapshot), [*datalab JupyterHub integration*](../../pydatalab/docs/tools-glossary.md#datalab-jupyterhub-integration), [*Delegated tool session*](../../pydatalab/docs/tools-glossary.md#delegated-tool-session), [*Delegated tool session lifetime*](../../pydatalab/docs/tools-glossary.md#delegated-tool-session-lifetime), [*Hub*](../../pydatalab/docs/tools-glossary.md#hub), [*IPython startup file*](../../pydatalab/docs/tools-glossary.md#ipython-startup-file), [*JupyterHub*](../../pydatalab/docs/tools-glossary.md#jupyterhub), [*Kernel banner*](../../pydatalab/docs/tools-glossary.md#kernel-banner), [*Launch code*](../../pydatalab/docs/tools-glossary.md#launch-code), [*New-notebook banner*](../../pydatalab/docs/tools-glossary.md#new-notebook-banner), [*Notebook save hook*](../../pydatalab/docs/tools-glossary.md#notebook-save-hook), [*Tool access token*](../../pydatalab/docs/tools-glossary.md#tool-access-token).
-
 The *datalab JupyterHub integration* connects an independently managed
 *JupyterHub* to the datalab
 **Tools** launch flow. It is also installed in the Compose-managed image.
@@ -41,7 +39,13 @@ notebooks when they are first created. At startup, the integration installs the
 banner HTML at
 `~/.local/share/datalab-jupyterhub/banner.html`; the hook copies that template
 into a non-editable but deletable Markdown cell. Existing and imported
-notebooks are not modified.
+notebooks are not modified. The banner includes a collapsed **Examples and
+help** section with read-only client examples and a link to the complete Python
+API reference.
+
+The Compose-managed single-user image includes SciPy, pandas, Matplotlib,
+seaborn, ipywidgets, lmfit, uncertainties, Pint, openpyxl, h5py, and tqdm.
+External deployments choose and maintain their own analysis packages.
 
 The Compose image also sets this JupyterLab default:
 

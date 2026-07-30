@@ -10,6 +10,18 @@ RUN python3 -m pip install --no-cache-dir \
         "dockerspawner==${DOCKERSPAWNER_VERSION}" \
         "jupyterhub-idle-culler==${IDLE_CULLER_VERSION}" \
         "jupyterlab==${JUPYTERLAB_VERSION}" \
+        "numpy<2" \
+        "scipy<2" \
+        "pandas<4" \
+        "matplotlib<4" \
+        "seaborn<1" \
+        "ipywidgets<9" \
+        "lmfit<2" \
+        "uncertainties<4" \
+        "pint<1" \
+        "openpyxl<4" \
+        "h5py<4" \
+        "tqdm<5" \
         /tmp/datalab-jupyterhub \
     && rm -rf /tmp/datalab-jupyterhub
 

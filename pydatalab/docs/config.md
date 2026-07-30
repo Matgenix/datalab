@@ -41,9 +41,7 @@ Use HTTPS for this URL outside loopback development and testing.
 
 ## Tools
 
-**Terms used:** [*Co-deployed JupyterHub*](tools-glossary.md#co-deployed-jupyterhub), [*External JupyterHub*](tools-glossary.md#external-jupyterhub), [*Jupyter external URL*](tools-glossary.md#jupyter-external-url), [*Jupyter public URL*](tools-glossary.md#jupyter-public-url), [*Jupyter tool provider*](tools-glossary.md#jupyter-tool-provider), [*Tool plugin*](tools-glossary.md#tool-plugin).
-
-Installed external *tool plugins* are enabled by default, for both standalone and
+Installed external tool plugins are enabled by default, for both standalone and
 in-app UI kinds.
 Disable selected plugins with the `TOOLS.DISABLED` set:
 
@@ -51,7 +49,7 @@ Disable selected plugins with the `TOOLS.DISABLED` set:
 PYDATALAB_TOOLS__DISABLED='["example-tool", "another-tool"]'
 ```
 
-The built-in *Jupyter tool provider* is opt-in:
+The built-in Jupyter tool is opt-in:
 
 ```shell
 export PYDATALAB_TOOLS__JUPYTER__ENABLED=true
@@ -62,9 +60,10 @@ export PYDATALAB_TOOLS__JUPYTER__CLIENT_SECRET="$(openssl rand -hex 32)"
 For a Compose `.env` file, run `openssl rand -hex 32` separately and paste its
 literal output as the value; dotenv files do not execute shell substitutions.
 
-When enabled, leaving `EXTERNAL_URL` unset selects a *co-deployed JupyterHub*.
-Set `PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL` to the browser-facing URL of an *external JupyterHub* instead.
-`PUBLIC_URL` optionally overrides the browser-facing URL of the *co-deployed JupyterHub*.
+When enabled, leaving `EXTERNAL_URL` unset selects a co-deployed JupyterHub.
+Set `PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL` to the browser-facing URL of an
+external JupyterHub instead. `PUBLIC_URL` optionally overrides the
+browser-facing URL of the co-deployed JupyterHub.
 Empty URL environment variables are treated as unset.
 For the local Compose-managed Hub, keep the matching Hub service settings in
 `.docker/jupyterhub/.env`; that file should repeat the same client ID, client
@@ -75,8 +74,9 @@ development and testing.
 The client secret is required whenever Jupyter is enabled, must contain at least
 32 characters without leading or trailing whitespace, and must be shared only
 with the corresponding Hub.
-See [Tools](tools.md) for the runtime and tool-access behavior,
-including [local and external JupyterHub deployment](tools.md#deploying-jupyterhub).
+See [Tools](tools.md) for a general introduction and
+[JupyterHub deployment](deployment.md#optional-jupyterhub-tool) for runtime,
+network, and security details.
 
 ## Mandatory settings
 
