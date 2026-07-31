@@ -54,9 +54,8 @@ uvx copier copy https://github.com/Matgenix/datalab-tool-plugin-template \
   ../my-datalab-tool
 ```
 
-The template repository is initially hosted at
-[Matgenix/datalab-tool-plugin-template](https://github.com/Matgenix/datalab-tool-plugin-template)
-and may later move to the `datalab-org` GitHub organisation.
+The template repository is hosted at
+[Matgenix/datalab-tool-plugin-template](https://github.com/Matgenix/datalab-tool-plugin-template).
 
 The template asks for the tool name, its stable ID, its Python distribution
 name, the UI type, and whether it opens in the same browser tab or a new one.
@@ -242,12 +241,11 @@ provider blueprint.
 The tutorials build two deliberately small plugins:
 
 - [Developing a standalone Tool plugin](plugin-development/standalone-tool-plugin.md),
-  also
-  represented by the future
+  accompanied by the
   [standalone example repository](https://github.com/Matgenix/datalab-standalone-tool-plugin-example),
   opens in a new tab and displays the signed-in user's accessible sample count.
 - [Developing an in-app Tool plugin](plugin-development/in-app-tool-plugin.md),
-  also represented by the future
+  accompanied by the
   [in-app example repository](https://github.com/Matgenix/datalab-in-app-tool-plugin-example),
   renders inside datalab and displays the same small piece of API-backed data.
 
