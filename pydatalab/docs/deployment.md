@@ -260,6 +260,26 @@ datalab       # authenticated datalab_api.DatalabClient
 current_user  # launch-time identity, role, and group snapshot
 ```
 
+JupyterLab also contributes **Open in notebook** to the selected-items menus
+for Samples, Inventory, Equipment, and items within a collection. Selecting
+1–20 rows creates a new notebook with a dedicated kernel and a visible
+initialization cell. datalab passes only immutable refcodes; the cell retrieves
+the current item dictionaries through the permission-aware API.
+
+The initialization cell runs automatically once when the notebook is created
+and defines:
+
+```python
+selected_item_refcodes  # ordered immutable refcodes from the table
+selected_items          # accessible item dictionaries
+selected_item_errors    # refcodes that could not be loaded
+```
+
+The cell remains editable and rerunnable. It is not executed automatically
+after a kernel restart or when the notebook is later opened with a fresh
+kernel. A normal JupyterLab launch from the Tools menu does not create a
+notebook and does not define these selection-specific variables.
+
 The managed image includes SciPy, pandas, Matplotlib, seaborn, ipywidgets,
 lmfit, uncertainties, Pint, openpyxl, h5py, and tqdm. NumPy is installed as a
 dependency and constrained for compatibility with the pinned `datalab-api`

@@ -51,8 +51,6 @@ class ToolRegistry:
             )
         if isinstance(provider.metadata.ui, InAppToolUI) and provider.blueprint is None:
             raise ValueError("In-app tools must serve their entrypoint from a plugin blueprint")
-        if provider.metadata.launch_actions and not isinstance(provider.metadata.ui, InAppToolUI):
-            raise ValueError("Tool launch actions are supported only for in-app tools")
         if not TOOL_ID_PATTERN.fullmatch(provider.id):
             raise ValueError(
                 f"Tool provider ID {provider.id!r} must be a lowercase hyphenated slug"

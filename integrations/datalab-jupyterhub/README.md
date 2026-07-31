@@ -43,6 +43,17 @@ notebooks are not modified. The banner includes a collapsed **Examples and
 help** section with read-only client examples and a link to the complete Python
 API reference.
 
+The integration also handles the Jupyter **Open in notebook** table action.
+After JupyterHub authenticates the user, it forwards a second short-lived,
+single-use code to the authenticated user server. The server exchanges that
+code using its delegated tool access token, creates a notebook with a dedicated
+kernel, and executes its visible selected-items initialization cell once.
+
+That cell defines `selected_item_refcodes`, `selected_items`, and
+`selected_item_errors`. It remains in the notebook so the user can rerun it
+after a kernel restart or a later reopening. Ordinary notebooks and consoles
+do not receive these selection-specific variables.
+
 The Compose-managed single-user image includes SciPy, pandas, Matplotlib,
 seaborn, ipywidgets, lmfit, uncertainties, Pint, openpyxl, h5py, and tqdm.
 External deployments choose and maintain their own analysis packages.

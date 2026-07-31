@@ -23,7 +23,7 @@ import { markRaw } from "vue";
 
 import Navbar from "@/components/Navbar.vue";
 import { getTools, launchTool } from "@/server_fetch_utils.js";
-import { isSupportedTool } from "@/tool_launch_utils.js";
+import { isSupportedTool, selectionFromRouteQuery } from "@/tool_launch_utils.js";
 import { loadInAppTool } from "@/tool_sdk.js";
 
 export default {
@@ -71,7 +71,16 @@ export default {
           throw new Error("The requested tool is not an in-app tool.");
         }
 
-        await launchTool(tool.id);
+        const selection = selectionFromRouteQuery(this.$route.query);
+        await launchTool(
+          tool.id,
+          selection
+            ? {
+                action: selection.actionId,
+                items: selection.itemRefcodes,
+              }
+            : {},
+        );
 
         const component = await loadInAppTool(tool);
         if (sequence !== this.loadSequence) {

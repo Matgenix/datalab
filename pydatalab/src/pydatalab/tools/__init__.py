@@ -3,6 +3,7 @@
 from .base import (
     BaseToolUI,
     InAppToolUI,
+    ItemSelection,
     ItemTableSelectionAction,
     StandaloneToolUI,
     ToolContext,
@@ -16,6 +17,7 @@ from .grants import exchange_launch_code
 __all__ = (
     "BaseToolUI",
     "InAppToolUI",
+    "ItemSelection",
     "ItemTableSelectionAction",
     "StandaloneToolUI",
     "ToolContext",

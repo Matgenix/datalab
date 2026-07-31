@@ -7,7 +7,7 @@ from typing import ClassVar, Literal, Protocol
 from urllib.parse import urlsplit
 
 from flask import Blueprint
-from pydantic import BaseModel, Field, StrictInt, root_validator, validator
+from pydantic import BaseModel, Field, StrictInt, StrictStr, root_validator, validator
 
 TOOL_ENTRYPOINT_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 TOOL_ACTION_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -61,6 +61,31 @@ class ItemTableSelectionAction(_ImmutableToolModel):
                     "Tool action limits must satisfy 1 <= min_items <= max_items <= 100"
                 )
         return values
+
+
+class ItemSelection(_ImmutableToolModel):
+    """One validated table-selection action and its ordered item refcodes."""
+
+    action_id: str
+    item_refcodes: tuple[StrictStr, ...]
+
+    @validator("action_id")
+    def action_id_is_lowercase_slug(cls, value):
+        if not TOOL_ACTION_ID_PATTERN.fullmatch(value):
+            raise ValueError("Tool action IDs must be lowercase hyphenated slugs")
+        return value
+
+    @validator("item_refcodes")
+    def item_refcodes_are_non_empty_and_unique(cls, value):
+        if not value:
+            raise ValueError("An item selection must contain at least one refcode")
+        if len(value) > 100:
+            raise ValueError("An item selection cannot contain more than 100 refcodes")
+        if any(not refcode or refcode != refcode.strip() for refcode in value):
+            raise ValueError("Selected item refcodes must be non-empty canonical strings")
+        if len(value) != len(set(value)):
+            raise ValueError("Selected item refcodes must not contain duplicates")
+        return value
 
 
 class ToolRouteAuth(str, Enum):

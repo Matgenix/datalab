@@ -55,4 +55,7 @@ def add_datalab_banner(model: dict[str, Any], path: str, contents_manager: Any) 
 def _load_jupyter_server_extension(server_app: Any) -> None:
     """Register the banner hook without replacing other notebook save hooks."""
 
+    from .selected_items import register_selected_items_handler
+
     server_app.contents_manager.register_pre_save_hook(add_datalab_banner)
+    register_selected_items_handler(server_app)

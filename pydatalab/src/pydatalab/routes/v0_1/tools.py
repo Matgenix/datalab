@@ -4,18 +4,23 @@ import json
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user
-from pydantic import AnyHttpUrl, parse_obj_as
+from pydantic import AnyHttpUrl, ValidationError, parse_obj_as
 
 from pydatalab.logger import LOGGER
-from pydatalab.login import is_browser_session_user
+from pydatalab.login import is_browser_session_user, is_tool_access_token_user
 from pydatalab.models.people import AccountStatus
 from pydatalab.permissions import active_users_or_get_only
 from pydatalab.tools.auth import request_origin_is_allowed
 from pydatalab.tools.base import (
+    ItemSelection,
     StandaloneToolUI,
     ToolContext,
+    ToolProvider,
 )
-from pydatalab.tools.grants import BoundToolLaunchGrantIssuer
+from pydatalab.tools.grants import (
+    BoundToolLaunchGrantIssuer,
+    consume_notebook_launch_code,
+)
 from pydatalab.tools.registry import TOOL_REGISTRY_EXTENSION, ToolRegistry
 
 from .info import Attributes, Data, JSONAPIResponse, Meta
@@ -38,6 +43,50 @@ def _active_tool_context() -> ToolContext | None:
 
 def _registry() -> ToolRegistry:
     return current_app.extensions[TOOL_REGISTRY_EXTENSION]
+
+
+def _launch_selection(provider: ToolProvider) -> ItemSelection | None:
+    payload = request.get_json(silent=True)
+    if payload is None:
+        if request.get_data(cache=True):
+            raise ValueError("The launch request must contain a JSON object")
+        return None
+    if not isinstance(payload, dict) or set(payload) - {"action", "items"}:
+        raise ValueError("The launch request contains unsupported fields")
+
+    action_id = payload.get("action")
+    item_refcodes = payload.get("items")
+    if action_id is None and item_refcodes is None:
+        return None
+    if not isinstance(action_id, str) or not isinstance(item_refcodes, list):
+        raise ValueError("A launch selection requires an action and an item list")
+    if len(item_refcodes) > 100:
+        raise ValueError("A launch selection cannot contain more than 100 items")
+    if any(not isinstance(refcode, str) for refcode in item_refcodes):
+        raise ValueError("Selected item refcodes must be strings")
+
+    ordered_refcodes = tuple(dict.fromkeys(item_refcodes))
+    try:
+        selection = ItemSelection(
+            action_id=action_id,
+            item_refcodes=ordered_refcodes,
+        )
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+
+    action = next(
+        (
+            candidate
+            for candidate in provider.metadata.launch_actions
+            if candidate.id == selection.action_id
+        ),
+        None,
+    )
+    if action is None:
+        raise ValueError("The requested launch action is not supported by this tool")
+    if not action.min_items <= len(selection.item_refcodes) <= action.max_items:
+        raise ValueError("The selected-item count is outside this tool action's limits")
+    return selection
 
 
 @TOOLS.route("/info/tools", methods=["GET"])
@@ -82,7 +131,16 @@ def launch_tool(tool_id: str):
     if provider is None:
         return jsonify({"status": "error", "message": "Tool not found or unavailable"}), 404
 
-    issuer = BoundToolLaunchGrantIssuer(tool_id=tool_id, user_id=context.user_id)
+    try:
+        selection = _launch_selection(provider)
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    issuer = BoundToolLaunchGrantIssuer(
+        tool_id=tool_id,
+        user_id=context.user_id,
+        selection=selection,
+    )
     try:
         result = provider.launch(context, issuer)
         launch_data = {}
@@ -97,5 +155,40 @@ def launch_tool(tool_id: str):
         return jsonify({"status": "error", "message": "Unable to launch tool"}), 503
 
     response = jsonify(launch_data)
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
+@TOOLS.route("/tools/jupyter/notebook-selection/exchange", methods=["POST"])
+@active_users_or_get_only
+def exchange_jupyter_notebook_selection():
+    """Consume a selected-items handoff from an authenticated Jupyter server."""
+    if not current_user.is_authenticated or not is_tool_access_token_user(current_user):
+        return jsonify({"status": "error", "message": "A tool access token is required"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    code = payload.get("code")
+    if not isinstance(code, str) or not code:
+        return jsonify({"status": "error", "message": "A notebook launch code is required"}), 400
+
+    tool_access_token = request.headers.get("DATALAB-API-KEY", "")
+    selection = consume_notebook_launch_code(
+        code=code,
+        tool_id="jupyter",
+        tool_access_token=tool_access_token,
+        expected_user_id=str(current_user.person.immutable_id),
+    )
+    if selection is None:
+        return (
+            jsonify({"status": "error", "message": "Invalid or expired notebook launch code"}),
+            400,
+        )
+
+    response = jsonify(
+        {
+            "action": selection.action_id,
+            "items": list(selection.item_refcodes),
+        }
+    )
     response.headers["Cache-Control"] = "no-store"
     return response, 200

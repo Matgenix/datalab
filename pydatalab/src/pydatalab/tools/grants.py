@@ -13,12 +13,15 @@ from pydatalab.login import get_by_id
 from pydatalab.models.people import AccountStatus
 from pydatalab.mongo import flask_mongo
 
-from .base import ToolContext, ToolLaunchGrantIssuer
+from .base import ItemSelection, ToolContext, ToolLaunchGrantIssuer
 
 DEFAULT_LAUNCH_LIFETIME_SECONDS = 60
 DEFAULT_TOOL_SESSION_LIFETIME_SECONDS = 24 * 60 * 60
 MAX_LAUNCH_LIFETIME_SECONDS = 10 * 60
 MAX_TOOL_SESSION_LIFETIME_SECONDS = DEFAULT_TOOL_SESSION_LIFETIME_SECONDS
+NOTEBOOK_LAUNCH_LIFETIME_SECONDS = 10 * 60
+_TOOL_LAUNCH_PURPOSE = "tool-launch"
+_NOTEBOOK_LAUNCH_PURPOSE = "notebook-selection"
 
 
 def _hash_secret(value: str) -> str:
@@ -43,6 +46,15 @@ class ToolLaunchExchange:
 
     context: ToolContext
     tool_session: DelegatedToolSession
+    selection: ItemSelection | None
+
+
+@dataclass(frozen=True)
+class _ConsumedLaunchGrant:
+    """Internal data recovered from one atomically consumed launch grant."""
+
+    user_id: str
+    selection: ItemSelection | None
 
 
 @dataclass(frozen=True)
@@ -51,6 +63,7 @@ class BoundToolLaunchGrantIssuer(ToolLaunchGrantIssuer):
 
     tool_id: str
     user_id: str
+    selection: ItemSelection | None = None
 
     def issue(
         self,
@@ -73,6 +86,8 @@ class BoundToolLaunchGrantIssuer(ToolLaunchGrantIssuer):
                 "user_id": ObjectId(self.user_id),
                 "tool_id": self.tool_id,
                 "client_id": client_id,
+                "purpose": _TOOL_LAUNCH_PURPOSE,
+                "selection": self.selection.dict() if self.selection else None,
                 "created_at": created_at,
                 "expires_at": created_at + timedelta(seconds=lifetime_seconds),
             }
@@ -80,13 +95,13 @@ class BoundToolLaunchGrantIssuer(ToolLaunchGrantIssuer):
         return code
 
 
-def consume_launch_code(
+def _consume_launch_code(
     code: str,
     tool_id: str,
     client_id: str,
     expected_user_id: str | None = None,
-) -> str | None:
-    """Atomically consume a matching unexpired launch code and return its user ID."""
+) -> _ConsumedLaunchGrant | None:
+    """Atomically consume one matching, unexpired tool launch grant."""
     if not code or not tool_id or not client_id:
         return None
 
@@ -94,6 +109,7 @@ def consume_launch_code(
         "_id": _hash_secret(code),
         "tool_id": tool_id,
         "client_id": client_id,
+        "purpose": _TOOL_LAUNCH_PURPOSE,
         "expires_at": {"$gt": _now()},
     }
     if expected_user_id is not None:
@@ -105,7 +121,79 @@ def consume_launch_code(
     grant = flask_mongo.db.tool_launch_grants.find_one_and_delete(query)
     if grant is None:
         return None
-    return str(grant["user_id"])
+    try:
+        selection_data = grant.get("selection")
+        selection = ItemSelection.parse_obj(selection_data) if selection_data else None
+    except (TypeError, ValueError):
+        return None
+    return _ConsumedLaunchGrant(user_id=str(grant["user_id"]), selection=selection)
+
+
+def issue_notebook_launch_code(
+    *,
+    user_id: str,
+    tool_id: str,
+    selection: ItemSelection,
+) -> str:
+    """Issue a short-lived code that hands one selection to a user server."""
+    created_at = _now()
+    code = secrets.token_urlsafe(32)
+    flask_mongo.db.tool_launch_grants.insert_one(
+        {
+            "_id": _hash_secret(code),
+            "user_id": ObjectId(user_id),
+            "tool_id": tool_id,
+            "purpose": _NOTEBOOK_LAUNCH_PURPOSE,
+            "selection": selection.dict(),
+            "created_at": created_at,
+            "expires_at": created_at + timedelta(seconds=NOTEBOOK_LAUNCH_LIFETIME_SECONDS),
+        }
+    )
+    return code
+
+
+def consume_notebook_launch_code(
+    *,
+    code: str,
+    tool_id: str,
+    tool_access_token: str,
+    expected_user_id: str,
+) -> ItemSelection | None:
+    """Consume one selection using an active token for the same user and tool."""
+    if not code or not tool_access_token:
+        return None
+    try:
+        user_id = ObjectId(expected_user_id)
+    except (InvalidId, TypeError):
+        return None
+
+    session = flask_mongo.db.tool_sessions.find_one(
+        {
+            "_id": _hash_secret(tool_access_token),
+            "user_id": user_id,
+            "tool_id": tool_id,
+            "expires_at": {"$gt": _now()},
+        },
+        projection={"_id": 1},
+    )
+    if session is None:
+        return None
+
+    grant = flask_mongo.db.tool_launch_grants.find_one_and_delete(
+        {
+            "_id": _hash_secret(code),
+            "user_id": user_id,
+            "tool_id": tool_id,
+            "purpose": _NOTEBOOK_LAUNCH_PURPOSE,
+            "expires_at": {"$gt": _now()},
+        }
+    )
+    if grant is None:
+        return None
+    try:
+        return ItemSelection.parse_obj(grant["selection"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def create_delegated_tool_session(
@@ -183,30 +271,34 @@ def exchange_launch_code(
             f"{MAX_TOOL_SESSION_LIFETIME_SECONDS} seconds"
         )
 
-    user_id = consume_launch_code(
+    grant = _consume_launch_code(
         code,
         tool_id,
         client_id,
         expected_user_id=expected_user_id,
     )
-    if user_id is None:
+    if grant is None:
         return None
 
-    user = get_by_id(user_id)
+    user = get_by_id(grant.user_id)
     if user is None or user.account_status != AccountStatus.ACTIVE:
         return None
 
     groups = user.groups or []
     context = ToolContext(
-        user_id=user_id,
+        user_id=grant.user_id,
         display_name=user.display_name,
         role=user.role.value,
         group_ids=tuple(str(group.immutable_id) for group in groups),
     )
     tool_session = create_delegated_tool_session(
-        user_id=user_id,
+        user_id=grant.user_id,
         tool_id=tool_id,
         client_id=client_id,
         lifetime_seconds=tool_session_lifetime_seconds,
     )
-    return ToolLaunchExchange(context=context, tool_session=tool_session)
+    return ToolLaunchExchange(
+        context=context,
+        tool_session=tool_session,
+        selection=grant.selection,
+    )

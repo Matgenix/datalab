@@ -60,7 +60,26 @@ class DatalabLoginHandler(LoginHandler):
         user = await self.login_user()
         if user is None:
             raise web.HTTPError(403, "Invalid or expired datalab launch code")
-        self.redirect(self.get_next_url(user), permanent=False)
+
+        next_url = self.get_next_url(user)
+        auth_state = await user.get_auth_state()
+        notebook_launch_code = (
+            auth_state.get("notebook_launch_code") if auth_state else None
+        )
+        if isinstance(notebook_launch_code, str) and notebook_launch_code:
+            spawner = user.spawners[""]
+            if not spawner.ready:
+                if not spawner.pending:
+                    await self.spawn_single_user(user)
+                if spawner._spawn_future is not None:
+                    await spawner._spawn_future
+                if not spawner.ready:
+                    raise web.HTTPError(503, "The Jupyter server did not become ready")
+            next_url = (
+                f"{url_path_join(user.url, 'datalab/open-selected')}?"
+                f"{urlencode({'notebook_launch_code': notebook_launch_code})}"
+            )
+        self.redirect(next_url, permanent=False)
 
 
 class DatalabAuthenticator(Authenticator):
@@ -141,6 +160,7 @@ class DatalabAuthenticator(Authenticator):
         display_name = payload["display_name"]
         group_ids = payload["group_ids"]
         expires_at = payload["expires_at"]
+        notebook_launch_code = payload.get("notebook_launch_code")
         if (
             not isinstance(user_id, str)
             or not user_id
@@ -153,6 +173,8 @@ class DatalabAuthenticator(Authenticator):
             or not isinstance(group_ids, list)
             or not all(isinstance(group_id, str) for group_id in group_ids)
             or not isinstance(expires_at, str)
+            or notebook_launch_code is not None
+            and (not isinstance(notebook_launch_code, str) or not notebook_launch_code)
         ):
             raise web.HTTPError(502, "datalab returned invalid authentication data")
         try:
@@ -169,15 +191,19 @@ class DatalabAuthenticator(Authenticator):
             "role": role,
             "group_ids": group_ids,
         }
+        auth_state = {
+            "tool_access_token": tool_access_token,
+            "api_url": api_url,
+            "current_user": current_user,
+            "expires_at": expires_at,
+        }
+        if notebook_launch_code is not None:
+            auth_state["notebook_launch_code"] = notebook_launch_code
+
         return {
             "name": username,
             "admin": False,
-            "auth_state": {
-                "tool_access_token": tool_access_token,
-                "api_url": api_url,
-                "current_user": current_user,
-                "expires_at": expires_at,
-            },
+            "auth_state": auth_state,
         }
 
     async def pre_spawn_start(self, user: Any, spawner: Any) -> None:

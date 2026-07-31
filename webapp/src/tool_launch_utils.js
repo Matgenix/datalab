@@ -59,12 +59,44 @@ export function itemTableSelectionActions(tools, dataType) {
   );
 }
 
-export async function openTool(tool, router, query = undefined) {
+function selectionLaunchPayload(selection) {
+  if (!selection) {
+    return {};
+  }
+  return {
+    action: selection.actionId,
+    items: selection.itemRefcodes,
+  };
+}
+
+export function selectionFromRouteQuery(query) {
+  const action = Array.isArray(query?.action) ? query.action[0] : query?.action;
+  const items = Array.isArray(query?.items)
+    ? query.items
+    : query?.items == null
+      ? []
+      : [query.items];
+  if (action == null && items.length === 0) {
+    return null;
+  }
+  return {
+    actionId: action,
+    itemRefcodes: items,
+  };
+}
+
+export async function openTool(tool, router, selection = null) {
   if (!isSupportedTool(tool)) {
     throw new Error("This tool requires an unsupported frontend integration.");
   }
 
   if (tool.ui.kind === "in_app") {
+    const query = selection
+      ? {
+          action: selection.actionId,
+          items: selection.itemRefcodes,
+        }
+      : undefined;
     const route = { name: "tool", params: { toolId: tool.id }, query };
     if (tool.ui.open_mode === "same_tab") {
       await router.push(route);
@@ -84,7 +116,7 @@ export async function openTool(tool, router, query = undefined) {
 
   const launchWindow = tool.ui.open_mode === "new_tab" ? openToolPlaceholderTab() : null;
   try {
-    const launch = await launchTool(tool.id);
+    const launch = await launchTool(tool.id, selectionLaunchPayload(selection));
     if (typeof launch.url !== "string") {
       throw new Error("The tool returned an unexpected launch result.");
     }
@@ -101,8 +133,8 @@ export async function openTool(tool, router, query = undefined) {
 }
 
 export async function openToolForItemSelection(tool, action, items, router) {
-  if (tool?.ui?.kind !== "in_app" || action?.kind !== "item-table-selection") {
-    throw new Error("This tool does not support an in-app table-selection action.");
+  if (!isSupportedTool(tool) || action?.kind !== "item-table-selection") {
+    throw new Error("This tool does not support a table-selection action.");
   }
 
   const itemRefcodes = [...new Set(items.map((item) => item?.refcode))];
@@ -114,7 +146,7 @@ export async function openToolForItemSelection(tool, action, items, router) {
   }
 
   await openTool(tool, router, {
-    action: action.id,
-    items: itemRefcodes,
+    actionId: action.id,
+    itemRefcodes,
   });
 }

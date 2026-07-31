@@ -158,7 +158,7 @@ into the webapp is an administrator trust decision, not a browser sandbox.
 
 ### Selected-items table actions
 
-An in-app tool may add an action to selected-items menus:
+A tool may add an action to selected-items menus:
 
 ```python
 metadata = ToolMetadata(
@@ -181,7 +181,7 @@ The supported table identifiers are `samples`, `inventory`, `equipment`, and
 `collection-items`. Selection limits must satisfy
 `1 <= min_items <= max_items <= 100`.
 
-When the user chooses the action, datalab opens the normal tool host with
+When the user chooses an in-app action, datalab opens the normal tool host with
 ordered, deduplicated item refcodes:
 
 ```text
@@ -197,6 +197,21 @@ const { actionId, itemRefcodes } = sdk.selection.current();
 Only immutable refcodes are passed—not item names, blocks, database IDs, or
 complete table rows. Query parameters are untrusted input, so the plugin must
 load current item data through permission-aware API routes.
+
+A standalone tool can declare the same action metadata. datalab validates the
+selection and sends it through the normal launch request:
+
+```json
+{
+  "action": "open-in-notebook",
+  "items": ["test:ABC", "test:DEF"]
+}
+```
+
+The ordered selection is bound to the provider's single-use launch grant and is
+returned by `exchange_launch_code`. A provider that declares several actions
+uses `selection.action_id` to distinguish them. A launch from the Tools menu
+has no selection.
 
 The
 [datalab item comparison tool](https://github.com/Matgenix/datalab-item-comparison-tool)

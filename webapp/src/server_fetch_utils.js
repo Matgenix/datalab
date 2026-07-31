@@ -379,8 +379,8 @@ export async function getTools() {
   }));
 }
 
-export async function launchTool(tool_id) {
-  return fetch_post(`${API_URL}/tools/${encodeURIComponent(tool_id)}/launch`, {});
+export async function launchTool(tool_id, launch = {}) {
+  return fetch_post(`${API_URL}/tools/${encodeURIComponent(tool_id)}/launch`, launch);
 }
 
 function resolveToolApiPath(path) {

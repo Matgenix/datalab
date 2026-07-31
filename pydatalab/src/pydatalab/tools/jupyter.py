@@ -9,13 +9,14 @@ from pydatalab import __version__
 from pydatalab.config import CONFIG
 
 from .base import (
+    ItemTableSelectionAction,
     ToolContext,
     ToolLaunchGrantIssuer,
     ToolMetadata,
     ToolProvider,
     ToolRouteAuth,
 )
-from .grants import exchange_launch_code
+from .grants import exchange_launch_code, issue_notebook_launch_code
 
 JUPYTER_BLUEPRINT = Blueprint("jupyter-tool", __name__)
 
@@ -34,6 +35,15 @@ class JupyterToolProvider(ToolProvider):
         description="Explore and analyse your datalab data programmatically in JupyterLab.",
         version=__version__,
         icon="book",
+        launch_actions=(
+            ItemTableSelectionAction(
+                id="open-in-notebook",
+                label="Open in notebook",
+                tables=("samples", "inventory", "equipment", "collection-items"),
+                min_items=1,
+                max_items=20,
+            ),
+        ),
     )
     blueprint = JUPYTER_BLUEPRINT
     route_auth = ToolRouteAuth.SERVICE
@@ -88,15 +98,21 @@ def exchange_jupyter_launch_code():
     if exchange is None:
         return jsonify({"status": "error", "message": "Invalid or expired launch code"}), 400
 
-    response = jsonify(
-        {
-            "user_id": exchange.context.user_id,
-            "display_name": exchange.context.display_name,
-            "role": exchange.context.role,
-            "group_ids": list(exchange.context.group_ids),
-            "tool_access_token": exchange.tool_session.tool_access_token,
-            "expires_at": exchange.tool_session.expires_at.isoformat(),
-        }
-    )
+    payload = {
+        "user_id": exchange.context.user_id,
+        "display_name": exchange.context.display_name,
+        "role": exchange.context.role,
+        "group_ids": list(exchange.context.group_ids),
+        "tool_access_token": exchange.tool_session.tool_access_token,
+        "expires_at": exchange.tool_session.expires_at.isoformat(),
+    }
+    if exchange.selection is not None:
+        payload["notebook_launch_code"] = issue_notebook_launch_code(
+            user_id=exchange.context.user_id,
+            tool_id=JupyterToolProvider.id,
+            selection=exchange.selection,
+        )
+
+    response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
     return response, 200

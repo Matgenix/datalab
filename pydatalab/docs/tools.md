@@ -42,9 +42,9 @@ Tools can provide one or both of these entry points:
   selected items' immutable refcodes and loads the current data through
   permission-aware API routes.
 
-The selected-items entry point is currently available to in-app tools. A tool
-chooses which tables and selection sizes it supports; it does not appear in
-tables for which it has not opted in.
+Selected-items actions use the same ordered list of immutable refcodes for
+in-app and standalone tools. A tool chooses which tables and selection sizes it
+supports; it does not appear in tables for which it has not opted in.
 
 ## Built-in tools and tool plugins
 
@@ -56,6 +56,20 @@ The only tool currently included with datalab is **JupyterLab**. It is a
 standalone tool and is disabled by default. An administrator can opt into the
 Compose-managed JupyterHub or connect datalab to a compatible external
 JupyterHub.
+
+When JupyterLab is opened from the Tools menu, it opens normally. When it is
+opened with **Open in notebook** after selecting 1–20 rows in Samples,
+Inventory, Equipment, or a collection's item table, it creates a new notebook
+for that selection. The notebook contains a visible initialization cell that:
+
+- stores the selected refcodes in `selected_item_refcodes`;
+- loads accessible item dictionaries into `selected_items`; and
+- records inaccessible or deleted refcodes in `selected_item_errors`.
+
+The cell runs automatically once when the notebook is created. It remains
+editable and can be rerun after restarting its kernel or reopening the notebook
+with a fresh kernel. Other notebooks and consoles continue to preload only
+`datalab` and `current_user`.
 
 See [server configuration](config.md#tools) for the available settings and
 [JupyterHub deployment](deployment.md#optional-jupyterhub-tool) for deployment
