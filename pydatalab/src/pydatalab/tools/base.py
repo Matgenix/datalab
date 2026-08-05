@@ -178,7 +178,7 @@ class ToolLaunchGrantIssuer(Protocol):
 
 
 class ToolProvider:
-    """Base class implemented by built-in and installed tool providers."""
+    """Base class implemented by installed tool providers."""
 
     id: ClassVar[str]
     metadata: ClassVar[ToolMetadata]

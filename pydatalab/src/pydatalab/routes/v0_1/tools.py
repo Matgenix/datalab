@@ -19,7 +19,7 @@ from pydatalab.tools.base import (
 )
 from pydatalab.tools.grants import (
     BoundToolLaunchGrantIssuer,
-    consume_notebook_launch_code,
+    consume_tool_selection_code,
 )
 from pydatalab.tools.registry import TOOL_REGISTRY_EXTENSION, ToolRegistry
 
@@ -159,28 +159,28 @@ def launch_tool(tool_id: str):
     return response, 200
 
 
-@TOOLS.route("/tools/jupyter/notebook-selection/exchange", methods=["POST"])
+@TOOLS.route("/tools/<string:tool_id>/selection/exchange", methods=["POST"])
 @active_users_or_get_only
-def exchange_jupyter_notebook_selection():
-    """Consume a selected-items handoff from an authenticated Jupyter server."""
+def exchange_tool_selection(tool_id: str):
+    """Consume a selected-items handoff from the authenticated delegated tool."""
     if not current_user.is_authenticated or not is_tool_access_token_user(current_user):
         return jsonify({"status": "error", "message": "A tool access token is required"}), 403
 
     payload = request.get_json(silent=True) or {}
     code = payload.get("code")
     if not isinstance(code, str) or not code:
-        return jsonify({"status": "error", "message": "A notebook launch code is required"}), 400
+        return jsonify({"status": "error", "message": "A selection code is required"}), 400
 
     tool_access_token = request.headers.get("DATALAB-API-KEY", "")
-    selection = consume_notebook_launch_code(
+    selection = consume_tool_selection_code(
         code=code,
-        tool_id="jupyter",
+        tool_id=tool_id,
         tool_access_token=tool_access_token,
         expected_user_id=str(current_user.person.immutable_id),
     )
     if selection is None:
         return (
-            jsonify({"status": "error", "message": "Invalid or expired notebook launch code"}),
+            jsonify({"status": "error", "message": "Invalid or expired selection code"}),
             400,
         )
 

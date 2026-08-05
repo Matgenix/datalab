@@ -29,14 +29,12 @@ These can be provided as either:
 > [!NOTE]
 > The possible ways to set configuration options can be inconsistent with each other, e.g., values required to be `None` in Python should be set to `null` in the JSON config file and as .env values. Similarly, boolean values may be set to `true` or `false` in the JSON config file, but can be set to {`1`, `yes`, `true`} or {`0`, `no`, `false`} in a `.env` file.
 
-Nested settings use a double underscore in environment-variable names.
-For example, `TOOLS.JUPYTER.ENABLED` becomes
-`PYDATALAB_TOOLS__JUPYTER__ENABLED`.
+Nested core settings use a double underscore in environment-variable names.
+For example, `TOOLS.DISABLED` becomes `PYDATALAB_TOOLS__DISABLED`.
 
 When the frontend and API use different non-loopback origins, set
 `PYDATALAB_APP_URL` to the canonical frontend URL.
-The tool launch endpoint treats this URL as its trusted browser origin, and it
-is also used to derive the default co-deployed JupyterHub URL.
+The tool launch endpoint treats this URL as its trusted browser origin.
 Use HTTPS for this URL outside loopback development and testing.
 
 ## Tools
@@ -49,31 +47,23 @@ Disable selected plugins with the `TOOLS.DISABLED` set:
 PYDATALAB_TOOLS__DISABLED='["example-tool", "another-tool"]'
 ```
 
-The built-in Jupyter tool is opt-in:
+JupyterLab is supplied by the separately installed
+[`datalab-jupyter`](https://github.com/Matgenix/datalab-jupyter) tool plugin.
+Its settings are owned by that package rather than `ServerConfig`:
 
 ```shell
-export PYDATALAB_TOOLS__JUPYTER__ENABLED=true
-export PYDATALAB_TOOLS__JUPYTER__CLIENT_ID=pydatalab-jupyterhub
-export PYDATALAB_TOOLS__JUPYTER__CLIENT_SECRET="$(openssl rand -hex 32)"
+export DATALAB_JUPYTER_CLIENT_ID=datalab-jupyter
+export DATALAB_JUPYTER_CLIENT_SECRET="$(openssl rand -hex 32)"
 ```
 
 For a Compose `.env` file, run `openssl rand -hex 32` separately and paste its
 literal output as the value; dotenv files do not execute shell substitutions.
 
-When enabled, leaving `EXTERNAL_URL` unset selects a co-deployed JupyterHub.
-Set `PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL` to the browser-facing URL of an
-external JupyterHub instead. `PUBLIC_URL` optionally overrides the
-browser-facing URL of the co-deployed JupyterHub.
-Empty URL environment variables are treated as unset.
-For the local Compose-managed Hub, keep the matching Hub service settings in
-`.docker/jupyterhub/.env`; that file should repeat the same client ID, client
-secret, and public URL.
-
-External, public, and APP-derived Hub URLs must use HTTPS outside loopback
-development and testing.
-The client secret is required whenever Jupyter is enabled, must contain at least
-32 characters without leading or trailing whitespace, and must be shared only
-with the corresponding Hub.
+Set `DATALAB_JUPYTER_EXTERNAL_URL` to the browser-facing URL of an independently
+managed Hub. `DATALAB_JUPYTER_PUBLIC_URL` optionally overrides the co-deployed
+Hub URL. The client secret must contain at least 32 characters and be shared
+only with the corresponding Hub. Installation enables the plugin; use the
+generic `TOOLS.DISABLED` setting to disable it.
 See [Tools](tools.md) for a general introduction and
 [JupyterHub deployment](deployment.md#optional-jupyterhub-tool) for runtime,
 network, and security details.
@@ -272,12 +262,6 @@ public/custom/
       show_source: false
 
 ::: pydatalab.config.ToolsSettings
-    options:
-      heading_level: 2
-      show_root_heading: true
-      show_source: false
-
-::: pydatalab.config.JupyterToolSettings
     options:
       heading_level: 2
       show_root_heading: true

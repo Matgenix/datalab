@@ -19,9 +19,9 @@ DEFAULT_LAUNCH_LIFETIME_SECONDS = 60
 DEFAULT_TOOL_SESSION_LIFETIME_SECONDS = 24 * 60 * 60
 MAX_LAUNCH_LIFETIME_SECONDS = 10 * 60
 MAX_TOOL_SESSION_LIFETIME_SECONDS = DEFAULT_TOOL_SESSION_LIFETIME_SECONDS
-NOTEBOOK_LAUNCH_LIFETIME_SECONDS = 10 * 60
+TOOL_SELECTION_LIFETIME_SECONDS = 10 * 60
 _TOOL_LAUNCH_PURPOSE = "tool-launch"
-_NOTEBOOK_LAUNCH_PURPOSE = "notebook-selection"
+_TOOL_SELECTION_PURPOSE = "tool-selection"
 
 
 def _hash_secret(value: str) -> str:
@@ -129,13 +129,13 @@ def _consume_launch_code(
     return _ConsumedLaunchGrant(user_id=str(grant["user_id"]), selection=selection)
 
 
-def issue_notebook_launch_code(
+def issue_tool_selection_code(
     *,
     user_id: str,
     tool_id: str,
     selection: ItemSelection,
 ) -> str:
-    """Issue a short-lived code that hands one selection to a user server."""
+    """Issue a short-lived code that hands a selection to its delegated tool."""
     created_at = _now()
     code = secrets.token_urlsafe(32)
     flask_mongo.db.tool_launch_grants.insert_one(
@@ -143,16 +143,16 @@ def issue_notebook_launch_code(
             "_id": _hash_secret(code),
             "user_id": ObjectId(user_id),
             "tool_id": tool_id,
-            "purpose": _NOTEBOOK_LAUNCH_PURPOSE,
+            "purpose": _TOOL_SELECTION_PURPOSE,
             "selection": selection.dict(),
             "created_at": created_at,
-            "expires_at": created_at + timedelta(seconds=NOTEBOOK_LAUNCH_LIFETIME_SECONDS),
+            "expires_at": created_at + timedelta(seconds=TOOL_SELECTION_LIFETIME_SECONDS),
         }
     )
     return code
 
 
-def consume_notebook_launch_code(
+def consume_tool_selection_code(
     *,
     code: str,
     tool_id: str,
@@ -184,7 +184,7 @@ def consume_notebook_launch_code(
             "_id": _hash_secret(code),
             "user_id": user_id,
             "tool_id": tool_id,
-            "purpose": _NOTEBOOK_LAUNCH_PURPOSE,
+            "purpose": _TOOL_SELECTION_PURPOSE,
             "expires_at": {"$gt": _now()},
         }
     )

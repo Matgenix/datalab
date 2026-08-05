@@ -24,7 +24,7 @@ TOOL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 
 
 class ToolRegistry:
-    """Registry of validated built-in and installed tool providers."""
+    """Registry of validated installed tool providers."""
 
     def __init__(self) -> None:
         self._providers: dict[str, ToolProvider] = {}
@@ -79,8 +79,6 @@ class ToolRegistry:
         """Return whether an installed provider is globally usable."""
         if self.get(tool_id) is None:
             return False
-        if tool_id == "jupyter":
-            return CONFIG.TOOLS.JUPYTER.ENABLED
         return tool_id not in CONFIG.TOOLS.DISABLED
 
     def _is_available(self, provider: ToolProvider, context: ToolContext) -> bool:
@@ -122,12 +120,7 @@ class ToolRegistry:
 
 def create_tool_registry() -> ToolRegistry:
     """Create a fresh registry for one Flask application."""
-    from .jupyter import JupyterToolProvider
-
     registry = ToolRegistry()
-    if CONFIG.TOOLS.JUPYTER.ENABLED:
-        registry.register(JupyterToolProvider())
-
     for entry_point in sorted(
         entry_points(group=TOOL_ENTRY_POINT_GROUP),
         key=lambda candidate: candidate.name,

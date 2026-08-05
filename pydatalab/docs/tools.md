@@ -46,16 +46,15 @@ Selected-items actions use the same ordered list of immutable refcodes for
 in-app and standalone tools. A tool chooses which tables and selection sizes it
 supports; it does not appear in tables for which it has not opted in.
 
-## Built-in tools and tool plugins
+## Tool plugins
 
-A tool can be included with datalab or installed as a custom
-[tool plugin](plugins.md#writing-a-tool-plugin). Installed plugins use the same
-Tools menu and selected-items integration as built-in tools.
+A tool is installed as a [tool plugin](plugins.md#writing-a-tool-plugin).
+Installed plugins use the same Tools menu and selected-items integration.
 
-The only tool currently included with datalab is **JupyterLab**. It is a
-standalone tool and is disabled by default. An administrator can opt into the
-Compose-managed JupyterHub or connect datalab to a compatible external
-JupyterHub.
+**JupyterLab** is provided by the companion
+[`datalab-jupyter`](https://github.com/Matgenix/datalab-jupyter) plugin. It is a
+standalone tool that can use the Compose-managed JupyterHub image or a compatible
+external JupyterHub.
 
 When JupyterLab is opened from the Tools menu, it opens normally. When it is
 opened with **Open in notebook** after selecting 1–20 rows in Samples,
@@ -71,6 +70,6 @@ editable and can be rerun after restarting its kernel or reopening the notebook
 with a fresh kernel. Other notebooks and consoles continue to preload only
 `datalab` and `current_user`.
 
-See [server configuration](config.md#tools) for the available settings and
+See [server configuration](config.md#tools) for installation settings and
 [JupyterHub deployment](deployment.md#optional-jupyterhub-tool) for deployment
 and security details.

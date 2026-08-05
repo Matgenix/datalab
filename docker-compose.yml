@@ -46,11 +46,10 @@ services:
       - PYDATALAB_MONGO_URI=mongodb://database:27017/datalabvue
       - PYDATALAB_APP_URL
       - PYDATALAB_TOOLS__DISABLED
-      - PYDATALAB_TOOLS__JUPYTER__ENABLED
-      - PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL
-      - PYDATALAB_TOOLS__JUPYTER__PUBLIC_URL
-      - PYDATALAB_TOOLS__JUPYTER__CLIENT_ID
-      - PYDATALAB_TOOLS__JUPYTER__CLIENT_SECRET
+      - DATALAB_JUPYTER_EXTERNAL_URL
+      - DATALAB_JUPYTER_PUBLIC_URL
+      - DATALAB_JUPYTER_CLIENT_ID
+      - DATALAB_JUPYTER_CLIENT_SECRET
       - WEB_CONCURRENCY=4
       - GUNICORN_CMD_ARGS=--timeout 120 --graceful-timeout 90
       - PORT=5001
@@ -110,11 +109,10 @@ services:
       - PYDATALAB_FILE_DIRECTORY=/app/files
       - PYDATALAB_APP_URL
       - PYDATALAB_TOOLS__DISABLED
-      - PYDATALAB_TOOLS__JUPYTER__ENABLED
-      - PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL
-      - PYDATALAB_TOOLS__JUPYTER__PUBLIC_URL
-      - PYDATALAB_TOOLS__JUPYTER__CLIENT_ID
-      - PYDATALAB_TOOLS__JUPYTER__CLIENT_SECRET
+      - DATALAB_JUPYTER_EXTERNAL_URL
+      - DATALAB_JUPYTER_PUBLIC_URL
+      - DATALAB_JUPYTER_CLIENT_ID
+      - DATALAB_JUPYTER_CLIENT_SECRET
 
   app-dev:
     profiles: ["dev"]
@@ -133,10 +131,7 @@ services:
 
   jupyterhub:
     profiles: ["jupyterhub"]
-    image: ${PYDATALAB_JUPYTER_IMAGE:-datalab-jupyter:5.5.0}
-    build:
-      context: .
-      dockerfile: .docker/jupyterhub/Dockerfile
+    image: ${DATALAB_JUPYTER_IMAGE:-datalab-jupyter:0.1.0}
     depends_on:
       api:
         condition: service_healthy
@@ -147,21 +142,28 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - datalab-jupyterhub-data:/srv/jupyterhub
+      - datalab-jupyter-data:/srv/jupyterhub
     ports:
-      - "${PYDATALAB_JUPYTERHUB_BIND_ADDRESS:-127.0.0.1}:${PYDATALAB_JUPYTERHUB_PORT:-8000}:8000"
+      - "${DATALAB_JUPYTER_BIND_ADDRESS:-127.0.0.1}:${DATALAB_JUPYTER_PORT:-8000}:8000"
     networks:
       tools:
         aliases:
-          - datalab-jupyterhub
-    env_file:
-      - ./.docker/jupyterhub/.env
+          - datalab-jupyter
     environment:
-      - PYDATALAB_JUPYTERHUB_API_URL=${PYDATALAB_JUPYTERHUB_API_URL:-http://datalab-api:5001}
-      - PYDATALAB_JUPYTERHUB_DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-datalab}_tools
-      - PYDATALAB_JUPYTERHUB_CONNECT_IP=datalab-jupyterhub
-      - PYDATALAB_JUPYTERHUB_VOLUME_PREFIX=${COMPOSE_PROJECT_NAME:-datalab}-jupyter
-      - PYDATALAB_JUPYTERHUB_SINGLEUSER_IMAGE=${PYDATALAB_JUPYTER_IMAGE:-datalab-jupyter:5.5.0}
+      - DATALAB_JUPYTER_API_URL=${DATALAB_JUPYTER_API_URL:-http://datalab-api:5001}
+      - DATALAB_JUPYTER_DOCKER_NETWORK=${DATALAB_JUPYTER_DOCKER_NETWORK:-${COMPOSE_PROJECT_NAME:-datalab}_tools}
+      - DATALAB_JUPYTER_CONNECT_IP=${DATALAB_JUPYTER_CONNECT_IP:-datalab-jupyter}
+      - DATALAB_JUPYTER_VOLUME_PREFIX=${DATALAB_JUPYTER_VOLUME_PREFIX:-${COMPOSE_PROJECT_NAME:-datalab}-jupyter}
+      - DATALAB_JUPYTER_SINGLEUSER_IMAGE=${DATALAB_JUPYTER_SINGLEUSER_IMAGE:-${DATALAB_JUPYTER_IMAGE:-datalab-jupyter:0.1.0}}
+      - DATALAB_JUPYTER_CLIENT_ID
+      - DATALAB_JUPYTER_CLIENT_SECRET
+      - DATALAB_JUPYTER_PUBLIC_URL
+      - DATALAB_JUPYTER_CPU_LIMIT
+      - DATALAB_JUPYTER_MEM_LIMIT
+      - DATALAB_JUPYTER_START_TIMEOUT
+      - DATALAB_JUPYTER_IDLE_TIMEOUT
+      - DATALAB_JUPYTER_MAX_AGE
+      - PYDATALAB_APP_URL
     healthcheck:
       test: ["CMD", "datalab-jupyter-healthcheck"]
       interval: 30s
@@ -178,4 +180,4 @@ networks:
 volumes:
   datalab-dev-dbdata:
   datalab-dev-files:
-  datalab-jupyterhub-data:
+  datalab-jupyter-data:

@@ -6,15 +6,12 @@ import platform
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
 
 from pydantic import (
-    AnyHttpUrl,
     AnyUrl,
     BaseModel,
     BaseSettings,
     Field,
-    SecretStr,
     ValidationError,
     root_validator,
     validator,
@@ -29,7 +26,6 @@ __all__ = (
     "DeploymentMetadata",
     "RemoteFilesystem",
     "ToolsSettings",
-    "JupyterToolSettings",
     "is_loopback_host",
 )
 
@@ -160,72 +156,9 @@ class _NestedSettings(BaseModel):
         extra = "forbid"
 
 
-class JupyterToolSettings(_NestedSettings):
-    """Configuration for the built-in JupyterLab tool."""
-
-    ENABLED: bool = Field(
-        False,
-        description="Whether the JupyterLab tool is available.",
-    )
-    EXTERNAL_URL: AnyHttpUrl | None = Field(
-        None,
-        description="Base URL of an independently deployed datalab-compatible JupyterHub.",
-    )
-    PUBLIC_URL: AnyHttpUrl | None = Field(
-        None,
-        description="Browser-facing base URL of a co-deployed JupyterHub.",
-    )
-    CLIENT_ID: str = Field(
-        "pydatalab-jupyterhub",
-        description="Client identifier used when JupyterHub exchanges launch grants.",
-    )
-    CLIENT_SECRET: SecretStr | None = Field(
-        None,
-        description="Shared secret used when JupyterHub exchanges launch grants.",
-    )
-
-    @validator("EXTERNAL_URL", "PUBLIC_URL", pre=True)
-    def empty_urls_are_unset(cls, value):
-        """Treat empty environment variables as absent optional URLs."""
-        if isinstance(value, str) and not value.strip():
-            return None
-        return value
-
-    @validator("EXTERNAL_URL", "PUBLIC_URL")
-    def jupyter_urls_are_bases(cls, value):
-        """Reject URL components that cannot be part of a Hub base URL."""
-        if value is not None and (
-            value.user is not None
-            or value.password is not None
-            or value.query is not None
-            or value.fragment is not None
-        ):
-            raise ValueError(
-                "Jupyter base URLs must not contain credentials, a query, or a fragment"
-            )
-        return value
-
-    @validator("CLIENT_ID")
-    def client_id_is_not_empty(cls, value):
-        if not value.strip():
-            raise ValueError("Jupyter CLIENT_ID must not be empty")
-        return value.strip()
-
-    def browser_url(self, app_url: str | None) -> str:
-        """Return the browser-facing JupyterHub URL for this deployment."""
-        if self.EXTERNAL_URL is not None:
-            return str(self.EXTERNAL_URL)
-        if self.PUBLIC_URL is not None:
-            return str(self.PUBLIC_URL)
-        if app_url:
-            return f"{app_url.rstrip('/')}/jupyter/"
-        return "http://localhost:8000/jupyter/"
-
-
 class ToolsSettings(_NestedSettings):
-    """Configuration for built-in and installed tools."""
+    """Configuration shared by installed tool plugins."""
 
-    JUPYTER: JupyterToolSettings = Field(default_factory=JupyterToolSettings)
     DISABLED: set[str] = Field(
         default_factory=set,
         description="Installed tool plugin IDs disabled for this deployment.",
@@ -467,47 +400,6 @@ its importance when deploying a datalab instance.""",
             for name in values.get("BACKUP_STRATEGIES", {}):
                 values["BACKUP_STRATEGIES"][name].active = False
 
-        return values
-
-    @root_validator
-    def validate_jupyter_configuration(cls, values):
-        """Validate security-sensitive Jupyter settings in one place."""
-        tools = values.get("TOOLS")
-        if tools is None or not tools.JUPYTER.ENABLED:
-            return values
-
-        jupyter = tools.JUPYTER
-        if jupyter.CLIENT_SECRET is None:
-            raise ValueError(
-                "TOOLS.JUPYTER.CLIENT_SECRET must be set when the Jupyter tool is enabled"
-            )
-
-        client_secret = jupyter.CLIENT_SECRET.get_secret_value()
-        if client_secret != client_secret.strip() or len(client_secret) < 32:
-            raise ValueError(
-                "TOOLS.JUPYTER.CLIENT_SECRET must contain at least 32 characters "
-                "and must not start or end with whitespace"
-            )
-
-        parsed_browser_url = urlsplit(jupyter.browser_url(values.get("APP_URL")))
-        if (
-            parsed_browser_url.scheme not in {"http", "https"}
-            or parsed_browser_url.hostname is None
-            or parsed_browser_url.username is not None
-            or parsed_browser_url.password is not None
-            or parsed_browser_url.query
-            or parsed_browser_url.fragment
-        ):
-            raise ValueError("The browser-facing Jupyter URL must be an absolute HTTP(S) URL")
-        if (
-            parsed_browser_url.scheme != "https"
-            and not values.get("TESTING")
-            and not is_loopback_host(parsed_browser_url.hostname)
-        ):
-            raise ValueError(
-                "The browser-facing Jupyter URL must use HTTPS unless it targets "
-                "a loopback host or datalab is running in testing mode"
-            )
         return values
 
     @validator("LOG_FILE")

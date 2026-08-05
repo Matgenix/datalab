@@ -15,6 +15,11 @@ Their intended standalone repositories are:
 - [datalab standalone tool plugin example](https://github.com/Matgenix/datalab-standalone-tool-plugin-example)
 - [datalab in-app tool plugin example](https://github.com/Matgenix/datalab-in-app-tool-plugin-example)
 
+The [datalab-jupyter](https://github.com/Matgenix/datalab-jupyter) companion
+component is a larger standalone example: its concrete provider is discovered
+through the same entry-point mechanism while its Hub and user-server modules
+are installed only in the processes that need them.
+
 datalab automatically authenticates every route in a plugin's declared
 blueprint. The examples therefore need no repeated login decorator.
 Authentication protects entry to the route; normal API calls apply

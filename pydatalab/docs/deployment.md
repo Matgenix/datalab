@@ -180,23 +180,36 @@ docker compose --file docker-compose.prod.yml --profile prod up
 
 ## Optional JupyterHub tool
 
-JupyterLab is the only tool included with datalab at present. It is disabled by
-default and can use either the JupyterHub included in the Compose deployment or
-an independently managed, datalab-compatible JupyterHub.
+JupyterLab is supplied by the independently maintained
+[`datalab-jupyter`](https://github.com/Matgenix/datalab-jupyter) component. Its
+`[plugin]` extra is installed in the Datalab API, while its `[hub]` and
+`[server]` extras can run in either the managed image or an independently
+administered JupyterHub deployment.
 
-See [server configuration](config.md#tools) for the
-`PYDATALAB_TOOLS__JUPYTER__...` settings.
+For local development, add the ignored checkout to the root `plugins.toml`:
+
+```toml
+dependencies = ["datalab-jupyter[plugin]"]
+
+[tool.uv.sources]
+datalab-jupyter = { path = "dev-repos/datalab-jupyter", editable = true }
+```
+
+Run `uv run invoke dev.install` from `pydatalab/`. Production deployments
+should use a versioned Git or package source.
 
 ### Compose-managed JupyterHub
 
-Enable the datalab setting, configure matching client credentials in
-`pydatalab/.env` and `.docker/jupyterhub/.env`, and start the fixed
-`jupyterhub` Compose profile alongside either the production or development
-profile:
+Build the companion image once, configure matching client credentials in the
+root environment, and start the fixed `jupyterhub` Compose profile alongside
+either the production or development profile:
 
 ```shell
-docker compose --profile prod --profile jupyterhub up --build --wait
-docker compose --profile dev --profile jupyterhub up --build --wait
+docker build -t datalab-jupyter:0.1.0 dev-repos/datalab-jupyter
+export DATALAB_JUPYTER_CLIENT_ID=datalab-jupyter
+export DATALAB_JUPYTER_CLIENT_SECRET="$(openssl rand -hex 32)"
+docker compose --profile prod --profile jupyterhub up --wait
+docker compose --profile dev --profile jupyterhub up --wait
 ```
 
 Production and development profiles are alternatives and should not be run
@@ -206,11 +219,11 @@ health-based API dependencies.
 The managed Hub binds to `127.0.0.1:8000` by default. For loopback development,
 its browser URL is normally `http://localhost:8000/jupyter/`. The bind address
 and port can be changed from the shell with
-`PYDATALAB_JUPYTERHUB_BIND_ADDRESS` and `PYDATALAB_JUPYTERHUB_PORT`.
+`DATALAB_JUPYTER_BIND_ADDRESS` and `DATALAB_JUPYTER_PORT`.
 
 In production, set `PYDATALAB_APP_URL` to the canonical frontend URL and proxy
 its `/jupyter/` path to the Hub, or set
-`PYDATALAB_TOOLS__JUPYTER__PUBLIC_URL` to another browser-facing HTTPS URL. The
+`DATALAB_JUPYTER_PUBLIC_URL` to another browser-facing HTTPS URL. The
 reverse proxy must:
 
 - preserve the `/jupyter/` prefix and forwarded host and protocol information;
@@ -220,8 +233,9 @@ reverse proxy must:
 - omit or redact `datalab_launch_code` values from access logs; and
 - terminate TLS outside loopback development.
 
-`PUBLIC_URL` changes the co-deployed Hub's browser-facing location.
-`EXTERNAL_URL` selects a separately administered Hub instead.
+`DATALAB_JUPYTER_PUBLIC_URL` changes the co-deployed Hub's browser-facing
+location. `DATALAB_JUPYTER_EXTERNAL_URL` selects a separately administered Hub
+instead.
 
 ### Security, networking, and storage
 
@@ -245,6 +259,10 @@ The managed defaults are:
 - a maximum server age of 24 hours; and
 - a persistent work volume keyed by the Compose project and immutable datalab
   user identity.
+
+Override these with `DATALAB_JUPYTER_CPU_LIMIT`,
+`DATALAB_JUPYTER_MEM_LIMIT`, `DATALAB_JUPYTER_START_TIMEOUT`,
+`DATALAB_JUPYTER_IDLE_TIMEOUT`, and `DATALAB_JUPYTER_MAX_AGE`.
 
 Hub state and encrypted authentication data use a separate persistent volume.
 Stopping a user server removes its disposable container while retaining its
@@ -287,13 +305,14 @@ client.
 
 ### External JupyterHub
 
-Set `PYDATALAB_TOOLS__JUPYTER__EXTERNAL_URL` to use an independently deployed
+Set `DATALAB_JUPYTER_EXTERNAL_URL` to use an independently deployed
 Hub. The local `jupyterhub` Compose profile is then unnecessary. The external
 administrator owns TLS, proxying, availability, spawning, storage, quotas,
 culling, and the user-server image.
 
-Install the `datalab-jupyterhub` integration in the external Hub and configure
-the matching datalab API URL, client ID, and client secret. The integration
+Install `datalab-jupyter[hub]` in the external Hub and
+`datalab-jupyter[server]` in its user image, then configure the matching Datalab
+API URL, client ID, and client secret. The integration
 exchanges a single-use launch code for a temporary current-user tool access
 token and passes it only to that user's notebook container. The external
 administrator must keep user-server lifetimes within the token lifetime and
