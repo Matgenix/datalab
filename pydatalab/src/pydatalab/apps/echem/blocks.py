@@ -29,16 +29,6 @@ class CycleBlock(DataBlock):
     from raw cycler files and plotting them with Bokeh.
 
     Navani documentation: https://be-smith.github.io/navani/
-
-    The file formats currently supported are:
-
-    - Biologic (.mpr) - requires galvani https://github.com/echemdata/galvani
-    - Arbin (.res, .xls and .xlsx) - the .res format requires galvani https://github.com/echemdata/galvani
-    - Neware (.nda, .ndax)
-    - Ivium (.txt)
-    - Lanhe/Lande (.xls, .xlsx) - most formats, certain exports may not work depending on the software version or settings
-    - Preprocessed (.csv) - CSV files with appropriate columns ['Capacity', 'Voltage', 'half cycle', 'full cycle', 'Current', 'state']
-
     """
 
     blocktype = "cycle"
@@ -49,7 +39,7 @@ class CycleBlock(DataBlock):
     - Biologic (.mpr)
     - Arbin (.res, .xls and .xlsx)
     - Neware (.nda, .ndax)
-    - Ivium (.txt)
+    - Ivium and Maccor text exports (.txt)
     - Lanhe/Lande (.xls, .xlsx)
     - Preprocessed (.csv) (previously extracted by navani or other tools)
     - Battery Data Format (.bdf, .bdf.csv, .bdf.parquet, .bdf.gz) - a standardized format defined by the Battery Data Alliance project (https://battery-data-alliance.github.io/battery-data-format/)
@@ -80,7 +70,6 @@ class CycleBlock(DataBlock):
     }
 
     def _get_characteristic_mass_g(self):
-        # return {"characteristic_mass": 1000}
         doc = flask_mongo.db.items.find_one(
             {"item_id": self.data["item_id"]}, {"characteristic_mass": 1}
         )
@@ -238,7 +227,7 @@ class CycleBlock(DataBlock):
         return raw_df, csv_path
 
     def _load_single(self, file_id: ObjectId, reload: bool) -> tuple[pd.DataFrame, Path | None]:
-        """Parse a single echem file using navani, with pickle caching.
+        """Parse a single echem file using navani and cache to disk.
 
         Returns the raw DataFrame and the BDF export path (or None if the source is already BDF
         or export failed).
@@ -253,19 +242,27 @@ class CycleBlock(DataBlock):
         ext = self._get_file_extension(filename)
         location = Path(file_info["location"])
         bare_stem = Path(filename).stem.removesuffix(".bdf")
+        parquet_path = location.with_name(f"{bare_stem}_cached.bdf.parquet")
+
+        if (
+            parquet_path.exists()
+            and file_info["last_modified"] is not None
+            and parquet_path.stat().st_mtime < file_info["last_modified"].timestamp()
+        ):
+            LOGGER.debug("Cache is older than source file for %s, forcing reload=True", filename)
+            reload = True
+
         if ext == ".bdf.parquet":
             # Source is already parquet: generate a .bdf.csv for download alongside it.
             # The parquet cache uses a _cached suffix to avoid overwriting the source.
-            parquet_path = location.with_name(f"{bare_stem}_cached.bdf.parquet")
             csv_path = location.with_name(f"{bare_stem}.bdf.csv")
             return self._load_and_cache_echem(location, parquet_path, csv_path, reload)
         if ext.startswith(".bdf"):
             # Other BDF formats: cache to parquet but don't write a redundant .bdf.csv.
             # bdf_url will fall back to linking the source file directly.
-            parquet_path = location.with_name(f"{bare_stem}_cached.bdf.parquet")
             return self._load_and_cache_echem(location, parquet_path, None, reload)
-        parquet_path = location.with_name(f"{location.stem}_cached.bdf.parquet")
-        csv_path = location.with_name(f"{location.stem}.bdf.csv")
+
+        csv_path = location.with_name(f"{bare_stem}.bdf.csv")
         return self._load_and_cache_echem(location, parquet_path, csv_path, reload)
 
     def _load_multi(
@@ -288,8 +285,20 @@ class CycleBlock(DataBlock):
         cache_location = locations[0].parent / f"merged_{cache_key}"
         parquet_path = cache_location.with_name(cache_location.name + "_cached.bdf.parquet")
         csv_path = cache_location.with_name(cache_location.name + ".bdf.csv")
+
+        # Check cache age and invalidate based on the most recent source file modification time
+        if not reload and parquet_path.exists():
+            cache_age = parquet_path.stat().st_mtime
+            source_ages = [
+                file_info["last_modified"].timestamp()
+                for file_info in file_infos
+                if file_info["last_modified"]
+            ]
+            if source_ages and cache_age < max(source_ages):
+                reload = True
+
         return self._load_and_cache_echem(
-            cache_location, parquet_path, csv_path, reload, locations=locations
+            cache_location, parquet_path, csv_path, reload=reload, locations=locations
         )
 
     @staticmethod
@@ -390,11 +399,7 @@ class CycleBlock(DataBlock):
             self.data["file_ids"] = file_ids
 
         else:
-            if "file_ids" not in self.data:
-                LOGGER.warning("No file_ids given, skipping plot.")
-                return
-            if self.data["file_ids"] is None or len(self.data["file_ids"]) == 0:
-                LOGGER.warning("Empty file_ids list given, skipping plot.")
+            if not self.data.get("file_ids", []):
                 return
 
             file_ids = self.data["file_ids"]
@@ -402,10 +407,8 @@ class CycleBlock(DataBlock):
         derivative_modes = (None, "dQ/dV", "dV/dQ", "final capacity")
 
         if self.data["derivative_mode"] not in derivative_modes:
-            LOGGER.warning(
-                "Invalid derivative_mode provided: %s. Expected one of %s. Falling back to `None`.",
-                self.data["derivative_mode"],
-                derivative_modes,
+            warnings.warn(
+                f"Invalid derivative_mode provided: {self.data['derivative_mode']}. Expected one of {derivative_modes}. Falling back to `None`."
             )
             self.data["derivative_mode"] = None
 
@@ -426,7 +429,7 @@ class CycleBlock(DataBlock):
             self.data["mode"] = "single"
 
         # Single/multi mode gets a single dataframe - returned as a dict for consistency
-        if self.data.get("mode") == "multi" or self.data.get("mode") == "single":
+        if self.data.get("mode") in ("multi", "single"):
             file_info = get_file_info_by_id(file_ids[0], update_if_live=True)
             filename = file_info["name"]
             raw_df, cycle_summary_df, bdf_path, first_file_id = self._load(

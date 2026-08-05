@@ -108,9 +108,13 @@
           label samples/cells by name</label
         >
       </div>
+      <div class="form-group form-check mt-3">
+        <input id="show-blocks" v-model="showBlocks" class="form-check-input" type="checkbox" />
+        <label class="form-check-label" for="show-blocks"> show data blocks </label>
+      </div>
     </div>
   </div>
-  <div id="cy" ref="cyContainer" v-bind="$attrs" />
+  <div id="cy" ref="cyContainer" v-bind="$attrs" :data-layout-running="layoutIsRunning" />
 </template>
 
 <script>
@@ -131,7 +135,8 @@ cytoscape.use(fcose);
 const layoutOptions = {
   "elk-disco": {
     name: "elk",
-    animate: true,
+    animate: "end",
+    animationDuration: 1000,
     elk: {
       algorithm: "disco",
     },
@@ -141,23 +146,32 @@ const layoutOptions = {
   },
   "elk-stress": {
     name: "elk",
+    animate: "end",
+    animationDuration: 300,
     elk: {
       algorithm: "stress",
+      // ELK has no way to cap layout time (maxSimulationTime), so bound the run with an iteration limit
+      "elk.stress.iterationLimit": 1000,
     },
   },
   cola: {
     name: "cola",
-    animate: true,
+    animate: "end",
+    animationDuration: 300,
     centerGraph: false,
+    maxSimulationTime: 4000,
   },
   euler: {
     name: "euler",
-    animate: true,
+    animate: "end",
+    animationDuration: 300,
     pull: 0.002,
+    maxSimulationTime: 4000,
   },
   fcose: {
     name: "fcose",
-    animate: true,
+    animate: "end",
+    animationDuration: 300,
     randomize: false,
     packComponents: true,
   },
@@ -182,6 +196,17 @@ export default {
       type: Boolean,
       default: true,
     },
+    defaultShowBlocks: {
+      type: Boolean,
+      default: false,
+    },
+    // When false, block nodes are stripped from the graph data before the
+    // cytoscape instance is created, so they cost nothing during layout
+    // (unlike defaultShowBlocks, which only hides them)
+    includeBlocks: {
+      type: Boolean,
+      default: true,
+    },
   },
   data() {
     return {
@@ -192,6 +217,7 @@ export default {
       ignoreCollections: [],
       labelStartingMaterialsByName: true,
       labelItemsByName: false,
+      showBlocks: this.defaultShowBlocks,
       layoutIsRunning: true,
     };
   },
@@ -216,6 +242,18 @@ export default {
         .style("label", this.labelItemsByName ? "data(name)" : "data(id)")
         .update();
     },
+    showBlocks() {
+      const blockNodes = this.cy.$('node[type = "blocks"]');
+      const blockEdges = blockNodes.connectedEdges();
+      if (this.showBlocks) {
+        blockNodes.show();
+        blockEdges.show();
+      } else {
+        blockNodes.hide();
+        blockEdges.hide();
+      }
+      this.updateAndRunLayout();
+    },
   },
   mounted() {
     if (this.graphData) {
@@ -227,6 +265,12 @@ export default {
   async created() {
     if (typeof this.cy !== "undefined") {
       this.generateCyNetworkPlot();
+    }
+  },
+  beforeUnmount() {
+    this.stopLayout();
+    if (this.cy) {
+      this.cy.destroy();
     }
   },
   methods: {
@@ -247,10 +291,14 @@ export default {
       }
     },
     updateAndRunLayout() {
-      this.layout && this.layout.stop();
+      this.stopLayout();
       this.layoutIsRunning = true;
       this.layout = this.cy.layout(layoutOptions[this.graphStyle]);
       this.layout.run();
+    },
+    stopLayout() {
+      this.layout && this.layout.stop();
+      this.layout = null;
     },
     generateCyNetworkPlot() {
       if (!this.graphData) {
@@ -261,19 +309,32 @@ export default {
         console.warn("Cytoscape container not ready");
         return;
       }
-      const nodeIds = new Set((this.graphData.nodes || []).map((n) => n.data.id));
+      // Destroy any previous instance so its (possibly still-running) layout
+      // does not keep going headlessly after losing the container.
+      if (this.cy) {
+        this.stopLayout();
+        this.cy.destroy();
+      }
+
+      // Filter nodes based on whether blocks are requested
+      let nodes = this.graphData.nodes || [];
+      if (!this.includeBlocks) {
+        nodes = nodes.filter((n) => n.data.type !== "blocks");
+      }
+      const nodeIds = new Set(nodes.map((n) => n.data.id));
+      // also drops any edges to filtered-out block nodes
       const validEdges = (this.graphData.edges || []).filter(
         (e) => nodeIds.has(e.data.source) && nodeIds.has(e.data.target),
       );
       this.cy = cytoscape({
         container: this.$refs.cyContainer,
-        elements: { nodes: this.graphData.nodes || [], edges: validEdges },
+        elements: { nodes: nodes, edges: validEdges },
         userPanningEnabled: true,
-        minZoom: 0.5,
+        minZoom: 0.05,
         maxZoom: 1,
         animatedZooming: false,
         userZoomingEnabled: true,
-        wheelSensitivity: 0.2,
+        wheelSensitivity: 0.5,
         boxSelectionEnabled: false,
         style: [
           {
@@ -295,6 +356,15 @@ export default {
             },
           },
           {
+            selector: 'node[type = "blocks"]',
+            style: {
+              label: "data(name)",
+              shape: "rectangle",
+              width: 20,
+              height: 20,
+            },
+          },
+          {
             selector: "edge",
             style: {
               width: 4,
@@ -305,21 +375,32 @@ export default {
             },
           },
         ],
-        layout: layoutOptions[this.graphStyle],
+        // The real layout is run further down, once the layout event handlers
+        // are attached; synchronous layouts (e.g. random) would otherwise
+        // finish before the handlers exist, leaving layoutIsRunning stuck
+        layout: { name: "preset" },
       });
 
       // set colors of each of the nodes by type
       this.cy.nodes().each(function (element) {
-        element.style(
-          "background-color",
-          element.data("special") == 1
-            ? itemTypes[element.data("type")].lightColor
-            : itemTypes[element.data("type")].navbarColor,
-        );
+        const type = element.data("type");
+        if (type && itemTypes[type]) {
+          element.style(
+            "background-color",
+            element.data("special") == 1 ? itemTypes[type].lightColor : itemTypes[type].navbarColor,
+          );
+        }
         element.style("border-width", element.data("special") == 1 ? 2 : 0);
         element.style("border-color", "grey");
         (element.style("shape"), element.data("shape") == "triangle" ? "triangle" : "ellipse");
       });
+
+      // Toggle hide block nodes
+      if (!this.showBlocks) {
+        const blockNodes = this.cy.$('node[type = "blocks"]');
+        blockNodes.hide();
+        blockNodes.connectedEdges().hide();
+      }
 
       this.cy.on("layoutstart", () => {
         this.layoutIsRunning = true;
@@ -327,7 +408,12 @@ export default {
 
       this.cy.on("layoutstop", () => {
         this.layoutIsRunning = false;
+        // Once the layout has settled, fit the whole graph within the container
+        // box (with a little padding) so nothing overflows the visible area.
+        this.cy.fit(undefined, 20);
       });
+
+      this.updateAndRunLayout();
 
       // tapdragover and tapdragout are mouseover and mouseout events
       // that also work with touch screens
@@ -343,10 +429,13 @@ export default {
         node.style("border-width", node.data("special") == 1 ? 2 : 0);
         node.style("border-color", "grey");
       });
+
       this.cy.on("click", "node", function (evt) {
         var node = evt.target;
         if (node.data("type") == "collections") {
           window.open(`/collections/${node.data("id").replace("Collection: ", "")}`, "_blank");
+        } else if (node.data("type") == "blocks") {
+          window.open(`/edit/${node.data("parent_item_id")}`, "_blank");
         } else {
           window.open(`/edit/${node.data("id")}`, "_blank");
         }
@@ -366,7 +455,7 @@ export default {
 
 #cy {
   width: 100%;
-  height: 90vh;
+  height: 80vh;
   /* display: block;*/
 }
 </style>

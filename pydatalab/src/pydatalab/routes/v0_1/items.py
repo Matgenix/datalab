@@ -45,6 +45,10 @@ ITEMS = Blueprint("items", __name__)
 # item types that should be accessed by anyone with an account
 ACCESSIBLE_TYPES = ("equipment", "starting_materials")
 
+# Legacy items predate `last_modified` being set on creation, so fall back to the
+# creation time embedded in their ObjectId.
+LAST_MODIFIED_PROJECTION = {"$ifNull": ["$last_modified", {"$toDate": "$_id"}]}
+
 
 @ITEMS.before_request
 @active_users_or_get_only
@@ -59,6 +63,7 @@ def get_equipment_summary():
         "name": 1,
         "type": 1,
         "date": 1,
+        "last_modified": LAST_MODIFIED_PROJECTION,
         "refcode": 1,
         "location": 1,
         "status": 1,
@@ -113,6 +118,7 @@ def get_starting_materials():
                         "nblocks": {"$size": "$display_order"},
                         "nfiles": {"$size": "$file_ObjectIds"},
                         "date": 1,
+                        "last_modified": LAST_MODIFIED_PROJECTION,
                         "chemform": 1,
                         "smiles": 1,
                         "inchi_key": 1,
@@ -192,6 +198,7 @@ def get_items_summary(match: dict | None = None, project: dict | None = None) ->
         "characteristic_chemical_formula": 1,
         "type": 1,
         "date": 1,
+        "last_modified": LAST_MODIFIED_PROJECTION,
         "refcode": 1,
         "status": 1,
     }
@@ -268,6 +275,7 @@ def get_samples_summary(match: dict | None = None, project: dict | None = None) 
         "characteristic_chemical_formula": 1,
         "type": 1,
         "date": 1,
+        "last_modified": LAST_MODIFIED_PROJECTION,
         "refcode": 1,
         "status": 1,
     }
@@ -551,7 +559,9 @@ def search_items():
 
 
 def _copy_sample_from_id(sample_dict: dict, copy_from_item_id: str) -> dict:
-    copied_doc = flask_mongo.db.items.find_one({"item_id": copy_from_item_id})
+    copied_doc = flask_mongo.db.items.find_one(
+        {"item_id": copy_from_item_id, **get_default_permissions(user_only=False)}
+    )
 
     LOGGER.debug("Copying from pre-existing item %s with data:\n%s", copy_from_item_id, copied_doc)
     if not copied_doc:
@@ -699,6 +709,9 @@ def _create_sample(
     # Set creation timestamp to now if not provided
     new_sample["date"] = new_sample.get("date", datetime.datetime.now(tz=datetime.timezone.utc))
 
+    # Always stamp the real creation time; `date` may be backdated or copied
+    new_sample["last_modified"] = datetime.datetime.now(tz=datetime.timezone.utc)
+
     # Try to deserialize the item data into the appropriate model
     try:
         # Check on relationship fields and prefill
@@ -727,7 +740,20 @@ def _create_sample(
 
     # Save initial version snapshot after successful item creation
     try:
-        save_version_snapshot(data_model.refcode, action=VersionAction.CREATED)
+        version_resp, version_status = save_version_snapshot(
+            data_model.refcode, action=VersionAction.CREATED
+        )
+        if version_status != 200:
+            LOGGER.error(
+                "Failed to save initial version for item %s after creation: %s",
+                data_model.item_id,
+                version_resp,
+            )
+        elif "version" in version_resp:
+            flask_mongo.db.items.update_one(
+                {"item_id": data_model.item_id},
+                {"$set": {"version": version_resp["version"]}},
+            )
     except Exception as e:
         # Log but don't fail the request since item was already created successfully
         LOGGER.error(
@@ -1149,6 +1175,10 @@ def get_item_data(
             404,
         )
 
+    # See LAST_MODIFIED_PROJECTION: same backfill, applied outside an aggregation
+    if not doc.get("last_modified") and isinstance(doc.get("_id"), ObjectId):
+        doc["last_modified"] = doc["_id"].generation_time
+
     # determine the item type and validate according to the appropriate schema
     try:
         ItemModel = ITEM_MODELS[doc["type"]]
@@ -1269,22 +1299,40 @@ def list_versions(refcode):
         refcode = f"{CONFIG.IDENTIFIER_PREFIX}:{refcode}"
 
     versions = list(
-        flask_mongo.db.item_versions.find(
-            {"refcode": refcode},
-            {
-                "_id": 1,
-                "timestamp": 1,
-                "user_id": 1,
-                "datalab_version": 1,
-                "version": 1,
-                "action": 1,
-                "restored_from_version": 1,
-                "data.version": 1,
-            },
-        ).sort("version", -1)
+        flask_mongo.db.item_versions.aggregate(
+            [
+                {"$match": {"refcode": refcode}},
+                {
+                    "$lookup": {
+                        "from": "users",
+                        "as": "creator",
+                        "let": {"user_id": "$user_id"},
+                        "pipeline": [
+                            {"$match": {"$expr": {"$eq": ["$_id", "$$user_id"]}}},
+                            {"$project": {"_id": 0, "display_name": 1, "gravatar_hash": 1}},
+                        ],
+                    }
+                },
+                # $lookup always yields an array; collapse the (0 or 1) match
+                # to a single-valued creator, leaving it null when absent.
+                {"$set": {"creator": {"$arrayElemAt": ["$creator", 0]}}},
+                {
+                    "$project": {
+                        "_id": 1,
+                        "timestamp": 1,
+                        "creator": 1,
+                        "datalab_version": 1,
+                        "version": 1,
+                        "action": 1,
+                        "restored_from_version": 1,
+                        "data.version": 1,
+                        "user_agent": 1,
+                    }
+                },
+                {"$sort": {"version": -1}},
+            ]
+        )
     )
-    for v in versions:
-        v["_id"] = str(v["_id"])
     return jsonify({"status": "success", "versions": versions}), 200
 
 
@@ -1309,10 +1357,33 @@ def get_version(refcode, version_id):
     except (InvalidId, TypeError):
         return jsonify({"status": "error", "message": f"Invalid version_id: {version_id}"}), 400
 
-    version = flask_mongo.db.item_versions.find_one({"_id": version_object_id, "refcode": refcode})
+    version = list(
+        flask_mongo.db.item_versions.aggregate(
+            [
+                {"$match": {"_id": version_object_id, "refcode": refcode}},
+                # Lookup from user_id from users collection and fill in creator info
+                {
+                    "$lookup": {
+                        "from": "users",
+                        "as": "creator",
+                        "let": {"user_id": "$user_id"},
+                        "pipeline": [
+                            {"$match": {"$expr": {"$eq": ["$_id", "$$user_id"]}}},
+                            {"$project": {"_id": 0, "display_name": 1, "gravatar_hash": 1}},
+                        ],
+                    }
+                },
+                {"$set": {"creator": {"$arrayElemAt": ["$creator", 0]}}},
+            ]
+        )
+    )
+
+    if len(version) >= 1:
+        version = version[0]
+
     if not version:
         return jsonify({"status": "error", "message": "Version not found"}), 404
-    version["_id"] = str(version["_id"])
+
     return jsonify({"status": "success", "version": version}), 200
 
 
@@ -1548,9 +1619,18 @@ def save_version(refcode):
     """Manually save the current state of an item as a version snapshot with an incremental version number."""
     response, status_code = save_version_snapshot(
         refcode,
-        action=VersionAction.MANUAL_SAVE,
+        action=None,  # let the function determine the appropriate action (e.g. AGENT_SAVE vs MANUAL_SAVE) based on user-agent
         permission_filter=get_default_permissions(user_only=False),
     )
+    if status_code == 200 and "version" in response:
+        if len(refcode.split(":")) != 2:
+            full_refcode = f"{CONFIG.IDENTIFIER_PREFIX}:{refcode}"
+        else:
+            full_refcode = refcode
+        flask_mongo.db.items.update_one(
+            {"refcode": full_refcode},
+            {"$set": {"version": response["version"]}},
+        )
     return jsonify(response), status_code
 
 
@@ -1582,11 +1662,10 @@ def save_item():
         "group_ids",
         "item_id",
         "relationships",
+        "last_modified",
     ):
         if k in updated_data:
             del updated_data[k]
-
-    updated_data["last_modified"] = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
 
     for block_id, block_data in updated_data.get("blocks_obj", {}).items():
         blocktype = block_data["blocktype"]
@@ -1621,9 +1700,6 @@ def save_item():
             ),
             400,
         )
-
-    # Increment version number on the item itself
-    updated_data["version"] = item.get("version", 0) + 1
 
     user_only = item["type"] not in ("starting_materials", "equipment")
 
@@ -1712,6 +1788,12 @@ def save_item():
     item.pop("collections")
     item.pop("creators")
 
+    # `last_modified` is controlled by the versioning branch below: only bump it when a
+    # snapshot is actually saved, so re-submitting identical data leaves it untouched.
+    existing_last_modified = item.pop("last_modified", None)
+    if isinstance(existing_last_modified, datetime.datetime):
+        existing_last_modified = existing_last_modified.isoformat()
+
     # Update the item FIRST (transaction safety: item update before version save)
     result = flask_mongo.db.items.update_one(
         {"item_id": item_id, **get_default_permissions(user_only=True)},
@@ -1728,26 +1810,38 @@ def save_item():
             400,
         )
 
-    # Now save a version AFTER successful item update
-    # If this fails, we log but don't fail the request since item was already saved
-    try:
-        save_version_resp_dict, save_version_status = save_version_snapshot(
-            refcode, action=VersionAction.MANUAL_SAVE
-        )
-        if save_version_status != 200:
-            LOGGER.error(
-                "Failed to save version for item %s after successful update: %s",
-                item_id,
-                save_version_resp_dict,
-            )
-    except Exception as e:
+    # Now save a version AFTER successful item update.
+    # Only increment item.version and bump last_modified when content actually changed
+    # (i.e., a snapshot was minted). If this fails, we log but don't fail the request
+    # since the item was already saved.
+    new_last_modified = None
+
+    save_version_resp_dict, save_version_status = save_version_snapshot(refcode)
+
+    if save_version_status != 200:
         LOGGER.error(
-            "Exception while saving version for item %s after successful update: %s",
+            "Failed to save version for item %s after successful update: %s",
             item_id,
-            str(e),
+            save_version_resp_dict,
+        )
+    elif "version" in save_version_resp_dict:
+        new_last_modified = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+        flask_mongo.db.items.update_one(
+            {"item_id": item_id},
+            {
+                "$set": {
+                    "version": save_version_resp_dict["version"],
+                    "last_modified": new_last_modified,
+                }
+            },
         )
 
-    return jsonify(status="success", last_modified=updated_data["last_modified"]), 200
+    # Report the freshly-minted timestamp when content changed. If no version was minted
+    # the item was unchanged, so flag it as a no-op and echo back the existing timestamp
+    if new_last_modified:
+        return jsonify(status="success", last_modified=new_last_modified), 200
+
+    return jsonify(status="success", unchanged=True, last_modified=existing_last_modified), 200
 
 
 @ITEMS.route("/items/<refcode>/access-token-info", methods=["GET"])

@@ -21,40 +21,74 @@ This repository consists of two components:
 
 To run *datalab*, you will need to install the environments for each component.
 
+As is typical of server applications, *datalab* is primarily tested on Linux.
+While unsupported, the instructions should also work on Windows (via [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install)) or macOS.
+For unsupported operating systems, we recommend the Docker-based installation instructions in [deployment.md](deployment.md).
+
 Firstly, from the desired folder, clone this repository from GitHub to your local machine with `git clone https://github.com/datalab-org/datalab`.
 If you are not familiar with `git` or GitHub, you can do worse than reading through the [GitHub getting started documentation](https://docs.github.com/en/get-started/start-your-journey/about-github-and-git).
 
 Your local development *datalab* can be configured with all the options as a real *datalab*; these are expected in the same places as described in [Server configuration](https://docs.datalab-org.io/en/latest/config/), and can be set with environment variables or a config file, with additional config and secrets provided in `.env` files in the `pydatalab/`  and `webapp/` directories for development purposes.
 
-### `pydatalab` server installation
+There are two main options for creating a local installation:
+
+1) Natively on your host machine, with a Python virtual environment for the server and Node.js for the web app.
+2) Using Docker, which is the recommended approach for development and testing.
+
+### Docker development environment
+
+The complete development stack can be run with Docker Compose:
+
+```shell
+docker compose --profile dev up --build
+```
+
+This starts the web app at [http://localhost:8081](http://localhost:8081), the API at
+[http://localhost:5001](http://localhost:5001), and MongoDB at
+`mongodb://localhost:27018`. Changes under `pydatalab/` and `webapp/` are
+bind-mounted into the containers and trigger the respective development servers to reload.
+
+After registration, you can make yourself admin with the command
+```shell
+docker compose exec api-dev /opt/.venv/bin/invoke admin.change-user-role \
+  --display-name "Your Name" --role admin
+```
+
+Stop the stack with `docker compose --profile dev down`. Add `--volumes` to also remove its
+development database and uploaded files.
+
+### Native installation
+
+#### `pydatalab` server installation
 
 The instructions in this section will leave you with a running *datalab* server on your host machine, as implemented in the `pydatalab` Python package.
 
-#### Database installation
+##### Database installation
 
 *datalab* uses MongoDB as its database backend.
 This requires a MongoDB server to be running on your desired host machine.
 
-1. Install the free MongoDB community edition (see the full instructions for your OS on the [MongoDB website](https://docs.mongodb.com/manual/installation/)).
-    * For MacOS users, MongoDB is available via [HomeBrew](https://github.com/mongodb/homebrew-brew).
-    * You can alternatively run the MongoDB via Docker using the config in this package with `docker compose up database` (see [deployment instructions](deployment.md)).
+1. Install the free MongoDB community edition (v8 is the currently supported version) -- see the full instructions for your OS on the [MongoDB website](https://docs.mongodb.com/manual/installation/).
+    * You can alternatively run the MongoDB via Docker using the config in this package with `docker compose up database`; if you run into platform-dependent permissions issues you can use a [`docker-compose.override.yml`](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/) file to adjust things for your system (see [deployment instructions](deployment.md) for more details of the Dockerised installation process).
+    * For MacOS users, MongoDB is also available via [HomeBrew](https://github.com/mongodb/homebrew-brew).
+    * You will need to ensure that MongoDB is running (rather than just installed) -- either run manually each time you run the `pydatalab` server set up MongoDB to run as a service on your computer.
     * If you wish to view the database directly, MongoDB has several GUIs, e.g. [MongoDB Compass](https://www.mongodb.com/products/compass) or [Studio 3T](https://robomongo.org/).
-    * For persistence, you will need to set up MongoDB to run as a service on your computer (or run manually each time you run the `pydatalab` server).
 
-#### Python setup
+##### Python setup
 
 The next step is to set up a Python environment that contains all of the required dependencies with the correct versions.
-You will need Python 3.10 or higher to run *datalab*; we recommend using a tool to manage Python versions on your machine, to avoid breakages based on your OS's Python versioning (e.g., [`pyenv`](https://github.com/pyenv/pyenv) or [`uv`](https://github.com/astral-sh/uv)).
+The currently supported versions are 3.10 and 3.11; you can find the full list of supported versions in the `pyproject.toml` file.
+We strongly recommend using a tool to manage Python versions on your machine, to avoid breakages based on your OS's Python versioning (e.g., [`uv`](https://github.com/astral-sh/uv)).
 
-##### Installation with `uv` or `venv`
+###### Installation with `uv` or `venv`
 
-We recommend using [`uv`](https://github.com/astral-sh/uv) (see the linked repository or https://docs.astral.sh/uv for installation instructions) for managing your *datalab* installation.
+We recommend using [`uv`](https://github.com/astral-sh/uv) (see the linked repository or the [uv documentation](https://docs.astral.sh/uv) for installation instructions) for managing your *datalab* installation.
 
 You could also use the standard library `venv` module, but this will not allow you to install pinned dependencies as easily, and is significantly slower than `uv`.
 
 1. Create a virtual environment for *datalab*, ideally inside the `pydatalab` directory.
-    - For `uv`, you can run `uv venv` (when installing using `uv sync`, this will be done automatically on installation).
-    - For `venv`, this can be done with `python -m venv .venv`.
+    - For `uv`, you can run `uv sync` to automatically install a compatible Python version and the relevant dependencies into a virtual environment.
+    - For `venv`, this can be done with `python -m venv .venv` for a pre-installed appropriate Python version.
     - Either way, you will be left with a folder called `.venv` in your `pydatalab` directory that bundles an entire Python environment.
 2. Activate the virtual environment (again, optional for `uv`) and install dependencies. One can either use the loosely pinned dependencies in `pyproject.toml`, or the locked versions in `uv.lock`.
 
@@ -75,7 +109,7 @@ You could also use the standard library `venv` module, but this will not allow y
     pip install -e '.[all]'
     ```
 
-##### Installing with plugins
+###### Installing with plugins
 
 If you would like to install *datalab* together with one or more plugins (e.g., custom data blocks from a third-party repository or a local checkout), create a `plugins.toml` file at the root of the repository (alongside `pydatalab/` and `webapp/`) declaring the plugin packages and their sources, then run:
 
@@ -88,7 +122,7 @@ This merges `plugins.toml` into a working copy of `pyproject.toml` under `./buil
 
 See the [plugins documentation](plugins.md) for the `plugins.toml` format and a full description of the install procedure.
 
-#### Running the development server
+###### Running the development server
 
 1. Run the server from the `pydatalab` folder with either:
 
@@ -125,33 +159,33 @@ Should you wish to contribute to/modify the Python code, you may wish to perform
     - The hooks that run on each commit can be found in the top-level `.pre-commit-config.yml` file.
 1. From an activated virtual environment, the tests on the Python code can be run by executing `pytest` from the `pydatalab/` folder (or `uv run pytest`).
 
-#### Additional notes
+##### Additional notes
 
 - If the Flask server is running when the source code is changed, it will generally hot-reload without needing to manually restart the server.
 This can be controlled with the `--reload` flag to the `flask run` command.
 - You may have to set `MONGO_URI` in your config file or environment variables (`PYDATALAB_MONGO_URI`) depending on your MongoDB setup, to e.g., `PYDATALAB_MONGO_URI=mongodb://localhost:27017/datalabvue`.
 
-### Web app
+#### Web app
 
-1. If you do not already have it, install `node.js` v20 or above and the Node Package Manager (`npm`).
-It is recommended not to install node using the official installer, since it is difficult to manage or uninstall, and permissions issues may arise.
+1. If you do not already have it, install `node.js` and the Node Package Manager (`npm`).
+It is recommended not to install node using the official installer, since it is difficult to manage multiple versions or uninstall, and permissions issues may arise.
 Instead, it is recommended to install and manage versions using the [node version manager (nvm)](https://github.com/nvm-sh/nvm#installing-and-updating): `nvm install --lts`.
-This will install the current recommended version of node and nvm.
+You will need a version compatible with the `node` version listed in the `engines` section of `webapp/package.json`.
 
 2. Once installed, use it to install the `yarn` package manager: `npm install --global yarn`
 From this point on, the `npm` command is not needed - all package and script management for the webapp is handled using `yarn`.
 3. Navigate to the `webapp/` directory in your local copy of this repository and run `yarn install` (requires ~400 MB of disk space).
 4. Run the webapp from a development server with `yarn serve`.
 
-#### Additional notes
+##### Additional notes
 
 Similar to the Flask development server, these steps will provide a development environment that serves the web app at [http://localhost:8081](http://localhost:8081) (by default) and automatically reloads it as changes are made to the source code.
 
 Various other development scripts are available through `yarn`:
 
 - `yarn lint`: Lint the JavaScript code using `eslint`, identifying issues and automatically fixing many. This linting process also runs automatically every time the development server reloads.
-- `yarn test:unit`: run the unit/component tests using `jest`. These test individual functions or components.
-- `yarn test:e2e`: run end-to-end tests using `cypress`. This will build and serve the app, and launch an instance of Chrome where the tests can be interactively viewed. The tests can also be run without the GUI using ```yarn test:e2e --headless```. Note: currently, the tests make requests to the server running on `localhost:5001`.
+- `yarn test:component`: run the component tests using `cypress`. These test individual functions or components, and run headless by default.
+- `yarn test:e2e`: run end-to-end tests using `cypress`. This will build and serve the app, and launch an instance of Chrome where the tests can be interactively viewed. Like the component tests, these tests can also be run without the GUI using `yarn test:e2e --headless`. Note: currently, the tests make requests to the server running on `localhost:5001`.
 - `yarn build`: Compile an optimised, minimised, version of the app for production.
 
 ## Development notes

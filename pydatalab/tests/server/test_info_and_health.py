@@ -21,6 +21,25 @@ def test_info_endpoint(client, url_prefix, app):
     assert auth["email"] is bool(app.config.get("MAIL_PASSWORD", None))
 
 
+def test_magic_link_auth_feature_flag_can_be_disabled(app, monkeypatch):
+    from pydatalab import config
+    from pydatalab.feature_flags import FEATURE_FLAGS, check_feature_flags
+
+    monkeypatch.setattr(config.CONFIG, "DISABLE_MAGIC_LINK_AUTH", True)
+    check_feature_flags(app)
+    assert FEATURE_FLAGS.email_notifications is True
+    assert FEATURE_FLAGS.auth_mechanisms.email is False
+
+
+def test_landing_page(unauthenticated_client, client):
+    """Check that the rudimentary landing page renders without error for both
+    unauthenticated and authenticated users."""
+    for _client in (unauthenticated_client, client):
+        response = _client.get("/")
+        assert response.status_code == 200
+        assert b"Welcome to pydatalab" in response.data
+
+
 @pytest.mark.parametrize("url_prefix", ["", "/v0", "/v0.1", "/v0.1.0"])
 def test_healthcheck_is_alive_endpoint(client, url_prefix):
     response = client.get(f"{url_prefix}/healthcheck/is_alive")

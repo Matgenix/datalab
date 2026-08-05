@@ -2,45 +2,59 @@
   <div class="container">
     <!-- Item information -->
     <div id="equipment-information" class="form-row">
-      <div class="form-group col-md-2 col-sm-4">
-        <label class="mr-2">Refcode</label>
-        <div><FormattedRefcode :refcode="Refcode" /></div>
-      </div>
-      <div class="form-group col-md-2 col-sm-4">
-        <label for="equip-item_id" class="mr-2">Item id</label>
-        <input id="equip-item_id" class="form-control-plaintext" readonly="true" :value="item_id" />
-      </div>
-      <div class="form-group col-md-6 col-sm-8">
+      <div class="form-group col-md-8 col-sm-8">
         <label for="equip-name" class="mr-2">Name</label>
         <input id="equip-name" v-model="Name" class="form-control" />
       </div>
-      <div class="form-group col-md-2 col-sm-4">
+      <div class="form-group col-md-4 col-sm-4">
         <label for="equip-date" class="mr-2">Date</label>
         <input id="equip-date" v-model="EquipmentDate" type="datetime-local" class="form-control" />
       </div>
     </div>
+
     <div class="form-row">
-      <div class="form-group col-md-2">
+      <div class="form-group col-md-3 col-sm-4">
+        <label class="mr-2">Refcode</label>
+        <div><FormattedRefcode :refcode="Refcode" /></div>
+      </div>
+      <div class="form-group col-md-3 col-sm-3 col-6 pb-3">
+        <ToggleableItemStatusFormGroup
+          v-model="Status"
+          :possible-item-statuses="possibleItemStatuses"
+        />
+      </div>
+      <div class="form-group col-md-3 col-sm-3">
         <label id="collections" class="mr-2">Collections</label>
         <div>
           <CollectionList aria-labelledby="collections" :collections="Collections" />
         </div>
       </div>
-      <div class="form-group col-md-5">
-        <label for="equip-manufacturer" class="mr-2">Manufacturer</label>
-        <span>
-          <input id="equip-manufacturer" v-model="Manufacturer" class="form-control" />
-        </span>
+      <div class="form-group col-md-3 col-sm-2">
+        <label for="equip-item_id" class="mr-2">Item id</label>
+        <input id="equip-item_id" class="form-control-plaintext" readonly="true" :value="item_id" />
       </div>
-      <div class="form-group col-md-5">
-        <label for="equip-location" class="mr-2">Location</label>
-        <AutoComplete
+    </div>
+
+    <div class="form-row">
+      <div class="form-group col-6 pb-3">
+        <ToggleableCreatorsFormGroup v-model="Maintainers" :refcode="Refcode" label="Maintainers" />
+      </div>
+      <div class="form-group col-6 pb-3">
+        <ToggleableGroupsFormGroup v-model="ItemGroups" :refcode="Refcode" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group col-md-6">
+        <label for="equip-manufacturer" class="mr-2">Manufacturer</label>
+        <input id="equip-manufacturer" v-model="Manufacturer" class="form-control" />
+      </div>
+      <div class="form-group col-md-6">
+        <label class="mr-2">Location</label>
+        <LocationInput
           v-model="Location"
+          :suggestions="uniqueLocations"
           input-id="equip-location"
-          :suggestions="filteredLocations"
-          class="form-control p-0 border-0"
-          input-class="form-control"
-          @complete="filterLocations"
         />
       </div>
     </div>
@@ -49,23 +63,9 @@
         <label for="equip-serial" class="mr-2">Serial no(s).</label>
         <input id="equip-serial" v-model="SerialNos" class="form-control" />
       </div>
-      <div class="col-md-4 pb-3">
-        <label id="equip-maintainers" class="mr-2">Maintainers</label>
-        <div class="mx-auto">
-          <Creators aria-labelledby="equip-maintainers" :creators="Maintainers" :size="36" />
-        </div>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group col-md-8">
+      <div class="form-group col-md-4">
         <label for="equip-contact" class="mr-2">Contact information</label>
         <input id="equip-contact" v-model="Contact" class="form-control" />
-      </div>
-      <div class="form-group col-md-3 col-sm-3 col-6 pb-3">
-        <ToggleableItemStatusFormGroup
-          v-model="Status"
-          :possible-item-statuses="possibleItemStatuses"
-        />
       </div>
     </div>
     <label id="equip-description-label" class="mr-2">Description</label>
@@ -83,12 +83,14 @@
 import AutoComplete from "primevue/autocomplete";
 import { getStartingMaterialList, getEquipmentList } from "@/server_fetch_utils.js";
 import { createComputedSetterForItemField } from "@/field_utils.js";
+import LocationInput from "@/components/LocationInput";
 import TiptapInline from "@/components/TiptapInline";
 import TableOfContents from "@/components/TableOfContents";
 import CollectionList from "@/components/CollectionList";
 import FormattedRefcode from "@/components/FormattedRefcode";
-import Creators from "@/components/Creators";
+import ToggleableCreatorsFormGroup from "@/components/ToggleableCreatorsFormGroup";
 import ToggleableItemStatusFormGroup from "@/components/ToggleableItemStatusFormGroup";
+import ToggleableGroupsFormGroup from "@/components/ToggleableGroupsFormGroup";
 
 export default {
   components: {
@@ -97,15 +99,16 @@ export default {
     CollectionList,
     TableOfContents,
     FormattedRefcode,
-    Creators,
+    ToggleableCreatorsFormGroup,
     ToggleableItemStatusFormGroup,
+    ToggleableGroupsFormGroup,
+    LocationInput,
   },
   props: {
     item_id: { type: String, required: true },
   },
   data() {
     return {
-      filteredLocations: [],
       tableOfContentsSections: [
         { title: "Equipment Information", targetID: "equipment-information" },
         { title: "Table of Contents", targetID: "table-of-contents" },
@@ -125,6 +128,7 @@ export default {
     EquipmentDate: createComputedSetterForItemField("date"),
     SerialNos: createComputedSetterForItemField("serial_numbers"),
     Maintainers: createComputedSetterForItemField("creators"),
+    ItemGroups: createComputedSetterForItemField("groups"),
     Contact: createComputedSetterForItemField("contact"),
     Status: createComputedSetterForItemField("status"),
     schema() {
@@ -154,12 +158,7 @@ export default {
       getEquipmentList();
     }
   },
-  methods: {
-    filterLocations(event) {
-      const query = event.query.toLowerCase();
-      this.filteredLocations = this.uniqueLocations.filter((l) => l.toLowerCase().includes(query));
-    },
-  },
+  methods: {},
 };
 </script>
 

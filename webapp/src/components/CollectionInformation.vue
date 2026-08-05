@@ -58,17 +58,16 @@
         'blocks',
         'chemform',
         'characteristic_chemical_formula',
+        'creatorsList',
       ]"
       :show-buttons="true"
       :collection-id="collection_id"
-      @remove-selected-items-from-collection="handleItemsRemovedFromCollection"
     />
   </div>
 </template>
 
 <script>
 import { createComputedSetterForCollectionField } from "@/field_utils.js";
-import { getCollectionSampleList } from "@/server_fetch_utils";
 import TiptapInline from "@/components/TiptapInline";
 import Creators from "@/components/Creators";
 import CollectionRelationshipVisualization from "@/components/CollectionRelationshipVisualization";
@@ -107,11 +106,11 @@ export default {
         },
         { field: "type", header: "Type", filter: true, label: "Type" },
         { field: "status", header: "Status", body: "FormattedItemStatus", filter: true },
-        { field: "name", header: "Sample name", label: "Sample Name" },
+        { field: "name", header: "Name", label: "Sample name" },
         { field: "chemform", header: "Formula", body: "ChemicalFormula", label: "Formula" },
         { field: "date", header: "Date", label: "Date", filter: true },
         {
-          field: "creators",
+          field: "creatorsAndGroups",
           header: "Creators",
           body: "Creators",
           label: "Creators",
@@ -132,6 +131,7 @@ export default {
           icon: ["fa", "file"],
           label: "Files",
         },
+        { field: "last_modified", header: "", label: "Last modified", icon: ["fa", "clock"] },
       ],
     };
   },
@@ -143,28 +143,22 @@ export default {
     CollectionCreators: createComputedSetterForCollectionField("creators"),
     CollectionGroups: createComputedSetterForCollectionField("groups"),
     children() {
-      return this.$store.state.all_collection_children[this.collection_id] || [];
+      const children = this.$store.state.all_collection_children[this.collection_id];
+      if (!children) {
+        return [];
+      }
+      return children.map((child) => ({
+        ...child,
+        creatorsAndGroups: [
+          ...(child.creators || []).map((c) => ({ ...c, type: "creator" })),
+          ...(child.groups || []).map((g) => ({ ...g, type: "group" })),
+        ],
+        creatorsList: (child.creators || []).map((creator) => creator.display_name).join(", "),
+      }));
     },
     collectionRefcode() {
       const collection = this.$store.state.all_collection_data[this.collection_id];
       return collection?.refcode || null;
-    },
-  },
-  created() {
-    this.getCollectionChildren();
-  },
-  methods: {
-    getCollectionChildren() {
-      getCollectionSampleList(this.collection_id)
-        .then(() => {
-          this.tableIsReady = true;
-        })
-        .catch(() => {
-          this.fetchError = true;
-        });
-    },
-    handleItemsRemovedFromCollection() {
-      this.getCollectionChildren();
     },
   },
 };

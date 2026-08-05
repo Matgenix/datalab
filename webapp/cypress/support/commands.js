@@ -305,6 +305,17 @@ Cypress.Commands.add("removeAllTestCollections", (collection_ids, check_collecti
   }
 });
 
+// Creates a collection via the "Create new collection" modal. Assumes the
+// caller is already on the /collections page.
+Cypress.Commands.add("createCollection", (collection_id, title = null) => {
+  cy.get('[data-testid="add-collection-button"]').click();
+  cy.get("#collection-id").type(collection_id);
+  if (title) {
+    cy.get("#title").type(title);
+  }
+  cy.get(".modal-footer input[type=submit]:visible").click();
+});
+
 Cypress.Commands.add("createStartingMaterial", (item_id, name = null, date = null) => {
   cy.findByText("Add a starting material").click();
 
@@ -375,6 +386,8 @@ Cypress.Commands.add("logout", () => {
 });
 
 Cypress.Commands.add("deleteSample", (item_id) => {
+  cy.get('[data-testid="search-input"]').clear();
+  cy.get('[data-testid="search-input"]').type(item_id);
   cy.selectItemCheckbox("sample", item_id);
   cy.get('[data-testid="selected-dropdown"]').click();
   cy.get('[data-testid="delete-selected-button"]').click();
@@ -383,6 +396,7 @@ Cypress.Commands.add("deleteSample", (item_id) => {
   cy.get("[data-testid=sample-table]")
     .contains(new RegExp("^" + item_id + "$", "g"))
     .should("not.exist");
+  cy.get('[data-testid="search-input"]').clear();
 });
 
 /**
