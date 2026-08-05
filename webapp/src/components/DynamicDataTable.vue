@@ -4,12 +4,54 @@
       Server Error. Sample list not retrieved.
     </div>
 
+    <DynamicDataTableButtons
+      :data-type="dataType"
+      :items-selected="itemsSelected"
+      :filters="filters"
+      :editable-inventory="editable_inventory"
+      :show-buttons="showButtons"
+      :available-columns="availableColumns"
+      :selected-columns="selectedColumns"
+      :collection-id="collectionId"
+      :all-users="allUsersForBulk"
+      :advanced-query-config="advancedQueryConfig"
+      @update:filters="updateFilters"
+      @update:selected-columns="onToggleColumns"
+      @open-create-item-modal="createItemModalIsOpen = true"
+      @open-batch-create-item-modal="batchCreateItemModalIsOpen = true"
+      @open-qr-scanner-modal="qrScannerModalIsOpen = true"
+      @open-create-collection-modal="createCollectionModalIsOpen = true"
+      @open-create-equipment-modal="createEquipmentModalIsOpen = true"
+      @open-add-to-collection-modal="addToCollectionModalIsOpen = true"
+      @open-batch-share-modal="batchShareModalIsOpen = true"
+      @delete-selected-items="deleteSelectedItems"
+      @remove-selected-items-from-collection="removeSelectedItemsFromCollection"
+      @reset-table="handleResetTable"
+      @users-data-changed="$emit('users-data-changed')"
+      @bulk-invalidate-tokens="handleItemsUpdated"
+      @bulk-delete-groups="$emit('groups-data-changed')"
+      @advanced-query-results="handleAdvancedQueryResults"
+      @update:quick-filters="onUpdateQuickFilters"
+      @update:group-by-fields="onUpdateGroupByFields"
+    />
+
+    <GroupedDataTable
+      v-if="groupByFields.length"
+      :items="displayedData || []"
+      :group-fields="groupByFields"
+      :items-selected="itemsSelected"
+      :columns="availableColumns"
+      @update:items-selected="itemsSelected = $event"
+      @row-click="goToEditPageFromGroup"
+    />
+
     <DataTable
+      v-else
       ref="datatable"
       v-model:filters="filters"
       v-model:selection="itemsSelected"
       v-model:select-all="allSelected"
-      :value="advancedQueryResults !== null ? advancedQueryResults : data"
+      :value="displayedData"
       :data-testid="computedDataTestId"
       selection-mode="checkbox"
       paginator
@@ -36,36 +78,6 @@
     >
       <!-- v-model:expandedRows="expandedRows" -->
 
-      <template #header>
-        <DynamicDataTableButtons
-          :data-type="dataType"
-          :items-selected="itemsSelected"
-          :filters="filters"
-          :editable-inventory="editable_inventory"
-          :show-buttons="showButtons"
-          :available-columns="availableColumns"
-          :selected-columns="selectedColumns"
-          :collection-id="collectionId"
-          :all-users="allUsersForBulk"
-          :advanced-query-config="advancedQueryConfig"
-          @update:filters="updateFilters"
-          @update:selected-columns="onToggleColumns"
-          @open-create-item-modal="createItemModalIsOpen = true"
-          @open-batch-create-item-modal="batchCreateItemModalIsOpen = true"
-          @open-qr-scanner-modal="qrScannerModalIsOpen = true"
-          @open-create-collection-modal="createCollectionModalIsOpen = true"
-          @open-create-equipment-modal="createEquipmentModalIsOpen = true"
-          @open-add-to-collection-modal="addToCollectionModalIsOpen = true"
-          @open-batch-share-modal="batchShareModalIsOpen = true"
-          @delete-selected-items="deleteSelectedItems"
-          @remove-selected-items-from-collection="removeSelectedItemsFromCollection"
-          @reset-table="handleResetTable"
-          @users-data-changed="$emit('users-data-changed')"
-          @bulk-invalidate-tokens="handleItemsUpdated"
-          @bulk-delete-groups="$emit('groups-data-changed')"
-          @advanced-query-results="handleAdvancedQueryResults"
-        />
-      </template>
       <template #loading>
         <div class="card text-center">
           <div class="card-body">
@@ -570,6 +582,7 @@
 
 <script>
 import DynamicDataTableButtons from "@/components/DynamicDataTableButtons";
+import GroupedDataTable from "@/components/GroupedDataTable";
 import CreateItemModal from "@/components/CreateItemModal";
 import BatchCreateItemModal from "@/components/BatchCreateItemModal";
 import QRScannerModal from "@/components/QRScannerModal";
@@ -621,6 +634,7 @@ import { fetchAdvancedQueryConfig } from "@/server_fetch_utils.js";
 export default {
   components: {
     DynamicDataTableButtons,
+    GroupedDataTable,
     CreateItemModal,
     BlocksIconCounter,
     FilesIconCounter,
@@ -713,6 +727,8 @@ export default {
       advancedQueryResults: null,
       advancedQueryConfig: null,
       advancedQueryConfigRequestId: 0,
+      activeQuickFilters: [],
+      groupByFields: [],
       itemsSelected: [],
       allSelected: false,
       filters: {
@@ -957,6 +973,14 @@ export default {
     knownTypes() {
       // Grab the set of types stored under the item type key
       return Array.from(new Set(this.data.map((item) => item.type))).map((type) => ({ type }));
+    },
+    displayedData() {
+      const base = this.advancedQueryResults !== null ? this.advancedQueryResults : this.data;
+      if (!base) return base;
+      if (!this.activeQuickFilters.length) return base;
+      return base.filter((item) =>
+        this.activeQuickFilters.every((filterId) => this.matchesQuickFilter(item, filterId)),
+      );
     },
     computedDataTestId() {
       const dataTestIdMap = {
@@ -1305,6 +1329,39 @@ export default {
       this.$nextTick(() => {
         this.filters[field].constraints[0].value = value;
       });
+    },
+    onUpdateQuickFilters(next) {
+      this.activeQuickFilters = next;
+    },
+    onUpdateGroupByFields(next) {
+      this.groupByFields = next;
+    },
+    matchesQuickFilter(item, filterId) {
+      if (filterId === "my_items") {
+        const displayName = this.$store.getters.getCurrentUserDisplayName;
+        return (item.creators || []).some((c) => c.display_name === displayName);
+      }
+      if (filterId === "latest_week" || filterId === "latest_month") {
+        if (!item.date) return false;
+        const days = filterId === "latest_week" ? 7 : 30;
+        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        return new Date(item.date).getTime() >= cutoff;
+      }
+      if (filterId === "active") {
+        return ["active", "working", "available"].includes((item.status || "").toLowerCase());
+      }
+      if (filterId === "has_blocks") {
+        return (item.blocks || []).length > 0 || (item.nblocks || 0) > 0;
+      }
+      return true;
+    },
+    goToEditPageFromGroup(row) {
+      if (this.dataType === "users") {
+        return;
+      }
+      const row_id = row.item_id || row.collection_id;
+      if (!row_id) return;
+      this.$router.push(`/${this.editPageRoutePrefix}/${row_id}`);
     },
     goToEditPage(event) {
       if (this.dataType === "users") {

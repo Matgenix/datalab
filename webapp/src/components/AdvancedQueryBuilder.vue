@@ -1,6 +1,7 @@
 <template>
   <div ref="root" class="adv-search">
     <button
+      v-if="!hideTrigger"
       class="adv-trigger"
       :class="{ 'adv-trigger--active': appliedSummary }"
       @click="isOpen = true"
@@ -138,8 +139,9 @@ export default {
   props: {
     listView: { type: String, default: "samples" },
     queryOptions: { type: Object, default: null },
+    hideTrigger: { type: Boolean, default: false },
   },
-  emits: ["query-results"],
+  emits: ["query-results", "update:applied-summary"],
   data() {
     return {
       isOpen: false,
@@ -182,6 +184,9 @@ export default {
     selectedType() {
       this.schedulePreview();
     },
+    appliedSummary(newVal) {
+      this.$emit("update:applied-summary", newVal);
+    },
   },
   async mounted() {
     this.typesLoading = true;
@@ -209,6 +214,10 @@ export default {
     clearTimeout(this.previewTimer);
   },
   methods: {
+    open() {
+      this.isOpen = true;
+    },
+
     emptyGroup() {
       return { kind: "group", combinator: "and", children: [] };
     },

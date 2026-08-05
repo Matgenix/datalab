@@ -96,7 +96,7 @@ _FIELD_UI: dict[str, dict] = {
     "refcode": {"label": "Refcode", "group": "Basic", "sortable": True},
     "description": {"label": "Description", "group": "Basic", "sortable": False},
     "date": {"label": "Date", "group": "Basic", "sortable": True},
-    "status": {"label": "Status", "group": "Basic", "sortable": True},
+    "status": {"label": "Status", "group": "Basic", "sortable": True, "groupable": True},
     "chemform": {
         "label": "Formula",
         "group": "Chemistry",
@@ -125,7 +125,7 @@ _FIELD_UI: dict[str, dict] = {
         "group": "Chemistry",
         "sortable": True,
     },
-    "cell_format": {"label": "Cell format", "group": "Cell", "sortable": True},
+    "cell_format": {"label": "Cell format", "group": "Cell", "sortable": True, "groupable": True},
     "cell_format_description": {
         "label": "Cell format description",
         "group": "Cell",
@@ -136,9 +136,14 @@ _FIELD_UI: dict[str, dict] = {
         "group": "Cell",
         "sortable": False,
     },
-    "supplier": {"label": "Supplier", "group": "Provenance", "sortable": True},
-    "location": {"label": "Location", "group": "Provenance", "sortable": True},
-    "manufacturer": {"label": "Manufacturer", "group": "Provenance", "sortable": True},
+    "supplier": {"label": "Supplier", "group": "Provenance", "sortable": True, "groupable": True},
+    "location": {"label": "Location", "group": "Provenance", "sortable": True, "groupable": True},
+    "manufacturer": {
+        "label": "Manufacturer",
+        "group": "Provenance",
+        "sortable": True,
+        "groupable": True,
+    },
     "serial_numbers": {"label": "Serial numbers", "group": "Provenance", "sortable": False},
     "contact": {"label": "Contact", "group": "Provenance", "sortable": False},
     "barcode": {"label": "Barcode", "group": "Provenance", "sortable": False},
@@ -441,6 +446,7 @@ def _normalise_query_option(
             "label": option.get("label") or base.get("label", field_id.replace("_", " ").title()),
             "group": option.get("group") or base.get("group", "Other"),
             "sortable": option.get("sortable", base.get("sortable", False)),
+            "groupable": option.get("groupable", base.get("groupable", False)),
             "operator_ids": operator_ids,
             "editor_override": option.get("editor_override") or base.get("editor_override", {}),
             "value_schema_override": option.get("value_schema_override")
@@ -474,12 +480,14 @@ def _build_model_field_registry(model: Any, type_id: str) -> dict[str, dict]:
         label = ui.get("label") or field_name.replace("_", " ").title()
         group = ui.get("group", "Other")
         sortable = ui.get("sortable", field_def.get("type") in ("string", "number", "integer"))
+        groupable = ui.get("groupable", False)
 
         registry[field_name] = {
             "mongo_path": field_name,
             "label": label,
             "group": group,
             "sortable": sortable,
+            "groupable": groupable,
             "operator_ids": operator_ids,
             "editor_override": editor_override,
             "value_schema_override": value_schema_override,
@@ -498,6 +506,7 @@ def _build_model_field_registry(model: Any, type_id: str) -> dict[str, dict]:
                 "label": cf_label,
                 "group": cf_group,
                 "sortable": False,
+                "groupable": False,
                 "operator_ids": ["has_constituent", "not_has_constituent"],
                 "editor_override": {},
                 "value_schema_override": {},
@@ -834,6 +843,7 @@ def get_query_schema():
                 "label": fdef["label"],
                 "group": fdef["group"],
                 "sortable": fdef["sortable"],
+                "groupable": fdef.get("groupable", False),
                 "operators": operators,
             }
         )
