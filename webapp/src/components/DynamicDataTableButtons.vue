@@ -88,7 +88,81 @@
       <div class="button-bar-spacer"></div>
 
       <div class="search-settings-group">
-        <IconField class="search-field">
+        <AdvancedQueryBuilder
+          v-if="advancedQueryConfig && advancedQueryConfig.isEnabled"
+          ref="advancedQueryBuilder"
+          hide-trigger
+          :list-view="advancedQueryConfig.listViewName"
+          :query-options="advancedQueryConfig.options"
+          @query-results="$emit('advanced-query-results', $event)"
+          @update:applied-summary="appliedQuerySummary = $event"
+        />
+
+        <div
+          v-if="advancedQueryConfig && advancedQueryConfig.isEnabled"
+          ref="advSearchRoot"
+          class="adv-search-group"
+        >
+          <div class="adv-search-box">
+            <font-awesome-icon icon="search" class="adv-search-box__icon" />
+            <span v-if="appliedQuerySummary" class="adv-search-chip" :title="appliedQuerySummary">
+              <font-awesome-icon icon="filter" class="adv-search-chip__icon" />
+              <span class="adv-search-chip__label">{{ appliedQuerySummary }}</span>
+              <span class="adv-search-chip__remove" @click.stop="clearAppliedQuery">×</span>
+            </span>
+            <span
+              v-if="activeQuickFilters.length"
+              class="adv-search-chip"
+              :title="activeQuickFilterLabels"
+            >
+              <font-awesome-icon icon="filter" class="adv-search-chip__icon" />
+              <span class="adv-search-chip__label">{{ activeQuickFilterLabels }}</span>
+              <span class="adv-search-chip__remove" @click.stop="onUpdateQuickFilters([])">×</span>
+            </span>
+            <span
+              v-if="groupByFields.length"
+              class="adv-search-chip"
+              :title="groupByFields.map((g) => g.label).join(' → ')"
+            >
+              <font-awesome-icon icon="folder" class="adv-search-chip__icon" />
+              <span class="adv-search-chip__label">{{
+                groupByFields.map((g) => g.label).join(" → ")
+              }}</span>
+              <span class="adv-search-chip__remove" @click.stop="onUpdateGroupByFields([])">×</span>
+            </span>
+            <input
+              v-model="localFilters.global.value"
+              data-testid="search-input"
+              class="adv-search-box__input"
+              placeholder="Search"
+            />
+            <button
+              data-testid="advanced-search-chevron"
+              type="button"
+              class="adv-search-box__chevron"
+              aria-label="Search options"
+              title="Search options"
+              @click="isAdvSearchDropdownVisible = !isAdvSearchDropdownVisible"
+            >
+              <font-awesome-icon icon="chevron-down" />
+            </button>
+          </div>
+
+          <AdvancedSearchDropdown
+            v-if="isAdvSearchDropdownVisible"
+            class="adv-search-dropdown"
+            :data-type="dataType"
+            :active-filters="activeQuickFilters"
+            :group-by-fields="groupByFields"
+            :custom-group-fields="customGroupFields"
+            :custom-group-loading="customGroupFieldsLoading"
+            @update:active-filters="onUpdateQuickFilters"
+            @update:group-by-fields="onUpdateGroupByFields"
+            @open-advanced-query="openAdvancedQuery"
+          />
+        </div>
+
+        <IconField v-else class="search-field">
           <InputIcon>
             <font-awesome-icon icon="search" />
           </InputIcon>
@@ -300,6 +374,9 @@ import "primeicons/primeicons.css";
 import BulkChangeRoleModal from "@/components/BulkChangeRoleModal.vue";
 import BulkAddToGroupModal from "@/components/BulkAddToGroupModal.vue";
 import BulkChangeManagersModal from "@/components/BulkChangeManagersModal.vue";
+import AdvancedQueryBuilder from "@/components/AdvancedQueryBuilder.vue";
+import AdvancedSearchDropdown from "@/components/AdvancedSearchDropdown.vue";
+import { QUICK_FILTERS } from "@/quickSearchOptions.js";
 
 import {
   deleteSample,
@@ -313,6 +390,7 @@ import {
   saveUserManagers,
   invalidateToken,
   deleteGroup,
+  fetchQuerySchema,
 } from "@/server_fetch_utils.js";
 
 export default {
@@ -324,6 +402,8 @@ export default {
     BulkChangeRoleModal,
     BulkAddToGroupModal,
     BulkChangeManagersModal,
+    AdvancedQueryBuilder,
+    AdvancedSearchDropdown,
   },
   props: {
     dataType: {
@@ -367,6 +447,11 @@ export default {
       required: false,
       default: () => [],
     },
+    advancedQueryConfig: {
+      type: Object,
+      required: false,
+      default: null,
+    },
   },
   emits: [
     "open-create-item-modal",
@@ -386,17 +471,26 @@ export default {
     "users-data-changed",
     "bulk-invalidate-tokens",
     "bulk-delete-groups",
+    "advanced-query-results",
+    "update:quick-filters",
+    "update:group-by-fields",
   ],
   data() {
     return {
       localFilters: { ...this.filters },
       isSelectedDropdownVisible: false,
       isSettingsDropdownVisible: false,
+      isAdvSearchDropdownVisible: false,
       isDeletingItems: false,
       itemCount: 0,
       showBulkChangeRoleModal: false,
       showBulkAddToGroupModal: false,
       showBulkChangeManagersModal: false,
+      activeQuickFilters: [],
+      groupByFields: [],
+      customGroupFields: [],
+      customGroupFieldsLoading: false,
+      appliedQuerySummary: null,
     };
   },
   computed: {
@@ -405,6 +499,11 @@ export default {
     },
     isLoggedIn() {
       return this.$store.state.currentUserID !== null;
+    },
+    activeQuickFilterLabels() {
+      return this.activeQuickFilters
+        .map((id) => QUICK_FILTERS.find((f) => f.id === id)?.label || id)
+        .join(", ");
     },
   },
   watch: {
@@ -416,8 +515,73 @@ export default {
     "localFilters.global.value"(newValue) {
       this.$emit("update:filters", { ...this.filters, global: { value: newValue } });
     },
+    advancedQueryConfig: {
+      immediate: true,
+      handler() {
+        this.loadCustomGroupFields();
+      },
+    },
+    dataType() {
+      this.onUpdateQuickFilters([]);
+      this.onUpdateGroupByFields([]);
+      this.isAdvSearchDropdownVisible = false;
+      this.appliedQuerySummary = null;
+    },
+  },
+  mounted() {
+    document.addEventListener("click", this.handleClickOutsideAdvSearch);
+  },
+  beforeUnmount() {
+    document.removeEventListener("click", this.handleClickOutsideAdvSearch);
   },
   methods: {
+    handleClickOutsideAdvSearch(event) {
+      if (this.$refs.advSearchRoot && !this.$refs.advSearchRoot.contains(event.target)) {
+        this.isAdvSearchDropdownVisible = false;
+      }
+    },
+    openAdvancedQuery() {
+      this.isAdvSearchDropdownVisible = false;
+      this.$refs.advancedQueryBuilder?.open();
+    },
+    onUpdateQuickFilters(next) {
+      this.activeQuickFilters = next;
+      this.$emit("update:quick-filters", next);
+    },
+    onUpdateGroupByFields(next) {
+      this.groupByFields = next;
+      this.$emit("update:group-by-fields", next);
+    },
+    clearAppliedQuery() {
+      this.$refs.advancedQueryBuilder?.clearFilters();
+    },
+    async loadCustomGroupFields() {
+      if (!this.advancedQueryConfig || !this.advancedQueryConfig.isEnabled) {
+        this.customGroupFields = [];
+        return;
+      }
+      this.customGroupFieldsLoading = true;
+      try {
+        const itemTypes = (
+          this.advancedQueryConfig.options?.item_types ||
+          this.advancedQueryConfig.options?.query_types ||
+          []
+        )
+          .filter((t) => t.queryable)
+          .map((t) => t.id);
+        const schema = await fetchQuerySchema(this.advancedQueryConfig.listViewName, itemTypes);
+        const loadedFieldIds = new Set(this.availableColumns.map((c) => c.field));
+        const staticFieldIds = new Set(["tags", "type", "creators", "status", "date"]);
+        this.customGroupFields = (schema.fields || [])
+          .filter((f) => f.groupable && loadedFieldIds.has(f.id) && !staticFieldIds.has(f.id))
+          .map((f) => ({ id: f.id, label: f.label }));
+      } catch (error) {
+        console.error("Failed to load groupable fields:", error);
+        this.customGroupFields = [];
+      } finally {
+        this.customGroupFieldsLoading = false;
+      }
+    },
     async confirmDeletion() {
       const idsSelected = this.itemsSelected.map((x) => x.item_id || x.collection_id);
       let idsSelectedLabel = idsSelected;
@@ -1011,5 +1175,104 @@ export default {
 
 .column-select-dropdown {
   width: 100%;
+}
+
+.adv-search-group {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 640px;
+}
+
+.adv-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(1.5em + 0.75rem + 2px);
+  padding: 0 0.6rem;
+  background: #fff;
+  border: 1px solid #ced4da;
+  border-radius: 0.25rem;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.adv-search-box:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.15);
+}
+
+.adv-search-box__icon {
+  flex-shrink: 0;
+  color: #6c757d;
+  font-size: 0.85rem;
+}
+
+.adv-search-box__input {
+  flex: 1 1 auto;
+  min-width: 40px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 1rem;
+  padding: 0;
+}
+
+.adv-search-box__chevron {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: #6c757d;
+  font-size: 0.75rem;
+  padding: 2px;
+  cursor: pointer;
+}
+.adv-search-box__chevron:hover {
+  color: #495057;
+}
+
+.adv-search-chip {
+  flex-shrink: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f5f3ff;
+  color: #6366f1;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  max-width: 180px;
+  min-width: 0;
+}
+
+.adv-search-chip__icon {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  opacity: 0.8;
+}
+
+.adv-search-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adv-search-chip__remove {
+  flex-shrink: 0;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.adv-search-chip__remove:hover {
+  opacity: 1;
+}
+
+.adv-search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1100;
 }
 </style>
