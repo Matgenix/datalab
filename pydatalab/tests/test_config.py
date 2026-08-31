@@ -68,6 +68,92 @@ def test_validators():
         _ = ServerConfig(IDENTIFIER_PREFIX="this prefix is way way too long", TESTING=False)
 
 
+def test_label_printing_config():
+    from pydatalab.config import LabelPrintingConfig, LabelPrintProfile
+
+    profile = LabelPrintProfile(
+        id="lab-label",
+        name="Lab label",
+        media_type="fixed",
+        width_mm=40,
+        height_mm=30,
+        printable_width_mm=36,
+        printable_height_mm=26,
+        dpi=300,
+        max_qr_size_mm=20,
+    )
+    config = LabelPrintingConfig(default_profile="lab-label", profiles=[profile])
+
+    assert config.default_profile == "lab-label"
+    assert config.profiles == [profile]
+
+
+def test_info_serializes_label_printing_config():
+    from pydatalab.routes.v0_1.info import Info, _get_deployment_metadata_once
+
+    attributes = Info(**_get_deployment_metadata_once()).model_dump(mode="json")
+
+    assert attributes["label_printing"] == {"default_profile": "a4-single", "profiles": []}
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        ({"height_mm": None}, "require height_mm"),
+        ({"printable_width_mm": 41}, "Printable width"),
+        ({"printable_height_mm": 31}, "Printable height must fit"),
+        ({"max_qr_size_mm": 37}, "Maximum QR size"),
+        ({"max_qr_size_mm": 25}, "Printable height must fit the QR"),
+        ({"media_type": "continuous"}, "must omit fixed height"),
+    ],
+)
+def test_label_print_profile_dimension_validation(overrides, message):
+    from pydatalab.config import LabelPrintProfile
+
+    values = {
+        "id": "lab-label",
+        "name": "Lab label",
+        "media_type": "fixed",
+        "width_mm": 40,
+        "height_mm": 30,
+        "printable_width_mm": 36,
+        "printable_height_mm": 26,
+        "dpi": 300,
+        "max_qr_size_mm": 20,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        LabelPrintProfile(**(values | overrides))
+
+
+@pytest.mark.parametrize(
+    "default_profile, profile_ids",
+    [
+        ("missing", []),
+        ("a4-single", ["duplicate", "duplicate"]),
+        ("a4-single", ["a4-single"]),
+    ],
+)
+def test_label_printing_profile_id_validation(default_profile, profile_ids):
+    from pydatalab.config import LabelPrintingConfig, LabelPrintProfile
+
+    profiles = [
+        LabelPrintProfile(
+            id=profile_id,
+            name=profile_id,
+            media_type="continuous",
+            width_mm=24,
+            printable_width_mm=18,
+            dpi=180,
+            max_qr_size_mm=18,
+        )
+        for profile_id in profile_ids
+    ]
+
+    with pytest.raises(ValueError):
+        LabelPrintingConfig(default_profile=default_profile, profiles=profiles)
+
+
 def test_mail_settings_combinations(tmpdir):
     """Tests that the config file mail settings get passed
     correctly to the flask settings, and that additional

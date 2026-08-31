@@ -197,6 +197,40 @@ public/custom/
 
 
 
+## QR label printing
+
+The web app includes generic profiles for 24 mm and 36 mm continuous tape, common fixed label
+sizes, and A6 and A4 pages. The selected profile is remembered in the current browser. A deployment
+can choose a default and add fixed-size or continuous-media profiles with `LABEL_PRINTING`:
+
+```json
+{
+  "LABEL_PRINTING": {
+    "default_profile": "tape-24mm",
+    "profiles": [
+      {
+        "id": "lab-label",
+        "name": "40 × 30 mm lab label",
+        "media_type": "fixed",
+        "width_mm": 40,
+        "height_mm": 30,
+        "printable_width_mm": 36,
+        "printable_height_mm": 26,
+        "dpi": 300,
+        "max_qr_size_mm": 20,
+        "alignment": "center",
+        "min_module_dots": 3
+      }
+    ]
+  }
+}
+```
+
+Profile IDs must be unique and must not replace built-in profile IDs.
+In the print dialog, select matching media and use 100% scale, no margins, and no headers or
+footers. Browser applications cannot detect the selected printer or installed tape. A warning is
+shown when a QR code uses fewer than the configured minimum number of printer dots per module.
+
 ## Config API Reference
 
 ::: pydatalab.config.ServerConfig
@@ -212,6 +246,18 @@ public/custom/
       show_source: false
 
 ::: pydatalab.config.SMTPSettings
+    options:
+      heading_level: 2
+      show_root_heading: true
+      show_source: false
+
+::: pydatalab.config.LabelPrintProfile
+    options:
+      heading_level: 2
+      show_root_heading: true
+      show_source: false
+
+::: pydatalab.config.LabelPrintingConfig
     options:
       heading_level: 2
       show_root_heading: true

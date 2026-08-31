@@ -46,6 +46,9 @@ describe("Sharing modal", () => {
       cy.get(".nav-tabs").contains("Sharing links & labels").click();
       cy.get('[data-testid="shareable-link"]').should("be.visible");
       cy.get('[data-testid="shareable-link"] a').should("have.attr", "href");
+      cy.get('[data-testid="label-printing"]').should("be.visible");
+      cy.findByLabelText("Label format").should("contain", "24 mm tape");
+      cy.contains("button", /Print (label|anyway)/).should("be.enabled");
     });
 
     modal().contains("button", "Done").click();

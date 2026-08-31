@@ -4,7 +4,7 @@ import logging
 import os
 import platform
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import (
     AnyUrl,
@@ -20,7 +20,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydatalab.models import Person
 from pydatalab.models.utils import RandomAlphabeticalRefcodeFactory, RefCodeFactory
 
-__all__ = ("CONFIG", "ServerConfig", "DeploymentMetadata", "RemoteFilesystem")
+__all__ = (
+    "CONFIG",
+    "ServerConfig",
+    "DeploymentMetadata",
+    "LabelPrintProfile",
+    "LabelPrintingConfig",
+    "RemoteFilesystem",
+)
 
 config_logger = logging.getLogger("pydatalab.config")
 
@@ -128,6 +135,73 @@ class SMTPSettings(BaseModel):
     )
 
 
+class LabelPrintProfile(BaseModel):
+    """A deployment-provided physical QR label profile."""
+
+    id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    name: str = Field(min_length=1)
+    media_type: Literal["continuous", "fixed"]
+    width_mm: float = Field(gt=0)
+    height_mm: float | None = Field(None, gt=0)
+    printable_width_mm: float = Field(gt=0)
+    printable_height_mm: float | None = Field(None, gt=0)
+    dpi: int = Field(gt=0)
+    max_qr_size_mm: float = Field(gt=0)
+    alignment: Literal["start", "center"] = "center"
+    min_module_dots: int = Field(3, ge=1)
+
+    @model_validator(mode="after")
+    def validate_dimensions(self):
+        if self.media_type == "fixed" and (
+            self.height_mm is None or self.printable_height_mm is None
+        ):
+            raise ValueError("Fixed label profiles require height_mm and printable_height_mm.")
+        if self.media_type == "continuous" and (
+            self.height_mm is not None or self.printable_height_mm is not None
+        ):
+            raise ValueError("Continuous label profiles must omit fixed height values.")
+        if self.printable_width_mm > self.width_mm:
+            raise ValueError("Printable width must fit within the media width.")
+        if self.height_mm is not None and self.printable_height_mm > self.height_mm:
+            raise ValueError("Printable height must fit within the media height.")
+        if self.max_qr_size_mm > self.printable_width_mm:
+            raise ValueError("Maximum QR size must fit within the printable width.")
+        if (
+            self.printable_height_mm is not None
+            and self.max_qr_size_mm + 6 > self.printable_height_mm
+        ):
+            raise ValueError("Printable height must fit the QR code and refcode.")
+        return self
+
+
+class LabelPrintingConfig(BaseModel):
+    """Deployment-wide QR label printing configuration."""
+
+    default_profile: str = "a4-single"
+    profiles: list[LabelPrintProfile] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_profiles(self):
+        builtins = {
+            "a4-single",
+            "a6-single",
+            "label-100x50mm",
+            "label-25x25mm",
+            "label-30x20mm",
+            "label-50x30mm",
+            "label-50x50mm",
+            "label-70x40mm",
+            "tape-24mm",
+            "tape-36mm",
+        }
+        profile_ids = [profile.id for profile in self.profiles]
+        if len(profile_ids) != len(set(profile_ids)) or builtins.intersection(profile_ids):
+            raise ValueError("Label profile IDs must be unique and must not replace built-ins.")
+        if self.default_profile not in builtins.union(profile_ids):
+            raise ValueError("The default label profile does not exist.")
+        return self
+
+
 class ServerConfig(BaseSettings):
     """A model that provides settings for deploying the API."""
 
@@ -213,6 +287,8 @@ class ServerConfig(BaseSettings):
     DEPLOYMENT_METADATA: DeploymentMetadata | None = Field(
         None, description="A dictionary containing metadata to serve at `/info`."
     )
+
+    LABEL_PRINTING: LabelPrintingConfig = Field(default_factory=LabelPrintingConfig)
 
     EMAIL_AUTO_ACTIVATE_ACCOUNTS: bool = Field(
         False,

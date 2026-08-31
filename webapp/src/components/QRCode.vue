@@ -1,22 +1,7 @@
 <template>
   <div class="text-center">
     <a :href="currentQRCodeUrl" target="_blank" rel="noopener noreferrer">
-      <QRCodeVue3
-        :key="currentQRCodeUrl"
-        :value="currentQRCodeUrl"
-        :width="width"
-        :height="width"
-        :qr-options="{ typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' }"
-        :image-options="{ hideBackgroundDots: false, imageSize: 0, margin: 0 }"
-        :dots-options="{
-          type: 'square',
-          color: 'black',
-        }"
-        :background-options="{ color: '#ffffff' }"
-        :corners-square-options="{ type: 'square', color: 'black' }"
-        :corners-dot-options="{ type: 'square', color: 'black' }"
-        file-ext="png"
-      />
+      <img :src="qrCode.image" :width="width" :height="width" alt="QR code" />
     </a>
 
     <div
@@ -48,6 +33,36 @@
         @click="copyUrl"
       >
         <font-awesome-icon :icon="copied ? 'check' : 'copy'" />
+      </button>
+    </div>
+
+    <div class="label-printing mt-3" data-testid="label-printing">
+      <label for="label-profile" class="form-label">Label format</label>
+      <select
+        id="label-profile"
+        class="form-select"
+        :value="selectedProfile.id"
+        @change="selectLabelProfile"
+      >
+        <option v-for="profile in labelProfiles" :key="profile.id" :value="profile.id">
+          {{ profile.name }}
+        </option>
+      </select>
+      <div class="label-preview mx-auto my-2" :style="previewPageStyle">
+        <div :style="previewContentStyle">
+          <img :src="qrCode.image" :style="previewQRStyle" alt="QR label preview" />
+          <div>{{ refcode }}</div>
+        </div>
+      </div>
+      <div v-if="qrTooDense" class="alert alert-warning py-2" data-testid="qr-density-warning">
+        This QR code may be unreliable at this label size ({{ moduleDots }} printer dots per
+        module).
+      </div>
+      <small class="d-block text-muted mb-2">
+        In the print dialog, use matching media, 100% scale, no margins, and no headers or footers.
+      </small>
+      <button type="button" class="btn btn-info" @click="printLabel">
+        {{ qrTooDense ? "Print anyway" : "Print label" }}
       </button>
     </div>
   </div>
@@ -125,17 +140,13 @@
 </template>
 
 <script>
-import QRCodeVue3 from "qrcode-vue3";
-
 import { DialogService } from "@/services/DialogService";
+import { BUILTIN_LABEL_PROFILES, dotsPerModule, makeQRCode } from "@/label_printing.js";
 
 import { FEDERATION_QR_CODE_RESOLVER_URL, QR_CODE_RESOLVER_URL, API_URL } from "@/resources.js";
 
 export default {
   name: "QRCode",
-  components: {
-    QRCodeVue3,
-  },
   props: {
     refcode: {
       type: String,
@@ -158,6 +169,7 @@ export default {
       isInvalidating: false,
       errorMessage: null,
       copied: false,
+      selectedProfileId: null,
     };
   },
   computed: {
@@ -182,6 +194,60 @@ export default {
       const url = this.isPublicMode ? this.publicQRCodeUrl : this.privateQRCodeUrl;
       return url;
     },
+    qrCode() {
+      return makeQRCode(this.currentQRCodeUrl);
+    },
+    labelProfiles() {
+      return [
+        ...BUILTIN_LABEL_PROFILES,
+        ...(this.$store.state.serverInfo?.label_printing?.profiles || []),
+      ];
+    },
+    selectedProfile() {
+      const configured = this.$store.state.serverInfo?.label_printing?.default_profile;
+      const preferred =
+        this.selectedProfileId || localStorage.getItem("datalab-label-profile") || configured;
+      return (
+        this.labelProfiles.find(({ id }) => id === preferred) ||
+        BUILTIN_LABEL_PROFILES.find(({ id }) => id === "a4-single")
+      );
+    },
+    moduleDots() {
+      return dotsPerModule(this.selectedProfile, this.qrCode.modules);
+    },
+    qrTooDense() {
+      return this.moduleDots < this.selectedProfile.min_module_dots;
+    },
+    labelHeightMm() {
+      return this.selectedProfile.height_mm || this.selectedProfile.max_qr_size_mm + 10;
+    },
+    previewPageStyle() {
+      const scale = Math.min(240 / this.selectedProfile.width_mm, 160 / this.labelHeightMm);
+      return {
+        width: `${this.selectedProfile.width_mm * scale}px`,
+        height: `${this.labelHeightMm * scale}px`,
+      };
+    },
+    previewContentStyle() {
+      const sideMargin =
+        (this.selectedProfile.width_mm - this.selectedProfile.printable_width_mm) / 2;
+      const topMargin = this.selectedProfile.height_mm
+        ? (this.selectedProfile.height_mm - this.selectedProfile.printable_height_mm) / 2
+        : 1;
+      return {
+        width: `${(this.selectedProfile.max_qr_size_mm / this.selectedProfile.width_mm) * 100}%`,
+        marginTop: `${(topMargin / this.labelHeightMm) * 100}%`,
+        marginLeft:
+          this.selectedProfile.alignment === "center"
+            ? "auto"
+            : `${(sideMargin / this.selectedProfile.width_mm) * 100}%`,
+        marginRight: this.selectedProfile.alignment === "center" ? "auto" : "0",
+        textAlign: "center",
+      };
+    },
+    previewQRStyle() {
+      return { width: "100%" };
+    },
     formattedCreationDate() {
       if (!this.tokenInfo?.created_at) return "Unknown";
 
@@ -203,6 +269,49 @@ export default {
     this.errorMessage = null;
   },
   methods: {
+    selectLabelProfile(event) {
+      this.selectedProfileId = event.target.value;
+      localStorage.setItem("datalab-label-profile", this.selectedProfileId);
+    },
+    printLabel() {
+      const profile = this.selectedProfile;
+      const sideMargin = (profile.width_mm - profile.printable_width_mm) / 2;
+      const topMargin = profile.height_mm
+        ? (profile.height_mm - profile.printable_height_mm) / 2
+        : 1;
+      const contentMargin = profile.alignment === "center" ? "auto" : "0";
+      const label = document.createElement("div");
+      const section = document.createElement("section");
+      const image = document.createElement("img");
+      const identifier = document.createElement("div");
+      const style = document.createElement("style");
+      label.className = "qr-label-print";
+      image.src = this.qrCode.image;
+      image.alt = "QR code";
+      identifier.textContent = this.refcode;
+      section.append(image, identifier);
+      label.append(section);
+      style.textContent = `
+        @page { size: ${profile.width_mm}mm ${this.labelHeightMm}mm; margin: 0; }
+        @media print {
+          body { margin: 0; }
+          body > * { display: none !important; }
+          body > .qr-label-print { display: block !important; width: ${profile.printable_width_mm}mm; margin-left: ${sideMargin}mm; padding-top: ${topMargin}mm; }
+          .qr-label-print section { width: ${profile.max_qr_size_mm}mm; margin: 0 ${contentMargin}; text-align: center; }
+          .qr-label-print img { display: block; width: ${profile.max_qr_size_mm}mm; height: ${profile.max_qr_size_mm}mm; }
+          .qr-label-print div { margin-top: 1mm; font: 2mm/2.4mm monospace; overflow-wrap: anywhere; }
+        }`;
+      document.body.append(style, label);
+      window.addEventListener(
+        "afterprint",
+        () => {
+          label.remove();
+          style.remove();
+        },
+        { once: true },
+      );
+      window.print();
+    },
     async copyUrl() {
       await navigator.clipboard.writeText(this.currentQRCodeUrl);
       this.copied = true;
@@ -369,5 +478,22 @@ export default {
 
 .shareable-link a {
   min-width: 0;
+}
+
+.label-printing {
+  border-top: 1px solid #dee2e6;
+  padding-top: 1rem;
+}
+
+.label-preview {
+  border: 1px solid #adb5bd;
+  background: white;
+  color: black;
+  font: 8px/1.2 monospace;
+  overflow: hidden;
+}
+
+.label-preview img {
+  display: block;
 }
 </style>
