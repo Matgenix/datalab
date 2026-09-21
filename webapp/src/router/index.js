@@ -12,6 +12,7 @@ import Admin from "@/views/Admin.vue";
 import Login from "../views/Login.vue";
 import Login2 from "../views/Login2.vue";
 import Login3 from "../views/Login3.vue";
+import MagicLinkConfirmation from "../views/MagicLinkConfirmation.vue";
 import { API_URL } from "@/resources.js";
 
 const routes = [
@@ -46,6 +47,12 @@ const routes = [
     name: "login3",
     alias: "/",
     component: Login3,
+  },
+  {
+    path: "/login/email",
+    name: "magic-link-confirmation",
+    component: MagicLinkConfirmation,
+    props: (route) => ({ token: String(route.query.token || "") }),
   },
   {
     path: "/equipment",
@@ -113,8 +120,8 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
-  if (to.query.token) {
-    window.location.href = API_URL + "/login/email?token=" + to.query.token;
+  if (to.query.token && to.name !== "magic-link-confirmation") {
+    next({ name: "magic-link-confirmation", query: { token: to.query.token } });
     return;
   }
 

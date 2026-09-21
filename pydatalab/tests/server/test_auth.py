@@ -34,7 +34,12 @@ def test_magic_link_account_creation(unauthenticated_client, app, database):
 
     with app.extensions["mail"].record_messages() as outbox:
         response = unauthenticated_client.get(f"/login/email?token={doc['jwt']}")
-        assert response.status_code == 307
+        assert response.status_code == 405
+        unused_doc = database.magic_links.find_one({"jwt": doc["jwt"]})
+        assert unused_doc["used_at"] is None
+
+        response = unauthenticated_client.post("/login/email", data={"token": doc["jwt"]})
+        assert response.status_code == 303
         new_user = database.users.find_one({"contact_email": "test@ml-evs.science"})
         assert new_user
         assert new_user["account_status"] == "unverified"
@@ -42,7 +47,7 @@ def test_magic_link_account_creation(unauthenticated_client, app, database):
 
     used_doc = database.magic_links.find_one({"jwt": doc["jwt"]})
     assert used_doc["used_at"] is not None
-    response = unauthenticated_client.get(f"/login/email?token={doc['jwt']}")
+    response = unauthenticated_client.post("/login/email", data={"token": doc["jwt"]})
     assert response.status_code == 500
     assert "Token has already been used, please request a new one." in response.json["message"]
 
@@ -56,19 +61,19 @@ def test_magic_link_legacy_document_without_used_at(unauthenticated_client, app,
         assert response.status_code == 200
         assert len(outbox) == 1
 
-    legacy_doc = database.magic_links.find_one()
+    legacy_doc = database.magic_links.find_one(sort=[("_id", -1)])
     database.magic_links.update_one({"_id": legacy_doc["_id"]}, {"$unset": {"used_at": ""}})
 
     legacy_doc = database.magic_links.find_one({"_id": legacy_doc["_id"]})
     assert "used_at" not in legacy_doc
 
-    response = unauthenticated_client.get(f"/login/email?token={legacy_doc['jwt']}")
-    assert response.status_code == 307
+    response = unauthenticated_client.post("/login/email", data={"token": legacy_doc["jwt"]})
+    assert response.status_code == 303
 
     updated_doc = database.magic_links.find_one({"_id": legacy_doc["_id"]})
     assert updated_doc["used_at"] is not None
 
-    response = unauthenticated_client.get(f"/login/email?token={legacy_doc['jwt']}")
+    response = unauthenticated_client.post("/login/email", data={"token": legacy_doc["jwt"]})
     assert response.status_code == 500
     assert "Token has already been used, please request a new one." in response.json["message"]
 
@@ -117,7 +122,7 @@ def test_magic_link_auth_can_be_disabled(unauthenticated_client, app, database, 
         assert len(outbox) == 0
         assert database.magic_links.count_documents({}) == 0
 
-        response = unauthenticated_client.get("/login/email?token=unused")
+        response = unauthenticated_client.post("/login/email", data={"token": "unused"})
         assert response.status_code == 403
         assert (
             response.json["message"]

@@ -761,14 +761,14 @@ def _send_magic_link_email(
         user = find_user_with_identity(email, IdentityType.EMAIL, verify=False)
         if user is not None:
             subject = "datalab Sign-in Magic Link"
-            body = f"Click the link below to sign-in to the datalab instance at {instance_url}:\n\n{link}\n\nThis link is single-use and will expire in 1 hour."
+            body = f"Open the link below, then confirm sign-in to the datalab instance at {instance_url}:\n\n{link}\n\nThis link is single-use and will expire in 1 hour."
         else:
             subject = "datalab Registration Magic Link"
-            body = f"Click the link below to register for the datalab instance at {instance_url}:\n\n{link}\n\nThis link is single-use and will expire in 1 hour."
+            body = f"Open the link below, then confirm registration for the datalab instance at {instance_url}:\n\n{link}\n\nThis link is single-use and will expire in 1 hour."
 
     elif purpose == "verify":
         subject = "datalab Email Address Verification"
-        body = f"Click the link below to verify your email address for the datalab instance at {instance_url}:\n\n{link}\n\nThis link is single-use and will expire in 1 hour."
+        body = f"Open the link below, then confirm your email address for the datalab instance at {instance_url}:\n\n{link}\n\nThis link is single-use and will expire in 1 hour."
 
     else:
         LOGGER.critical("Unknown purpose %s for magic link email", purpose)
@@ -800,11 +800,11 @@ def generate_and_share_magic_link():
     return jsonify({"status": "success", "message": "Email sent successfully."}), 200
 
 
-@EMAIL_BLUEPRINT.route("/email")
+@EMAIL_BLUEPRINT.route("/email", methods=["POST"])
 def email_logged_in():
     """Endpoint for handling magic link authentication.
 
-    - Checks the passed token for as valid JWT in the `magic_links` collection
+    - Checks the passed token as a valid JWT in the `magic_links` collection.
     - If found, checks if the user with the decoded email exists in the user
     collection.
     - If not found, make the user account and verify their email address,
@@ -814,21 +814,11 @@ def email_logged_in():
     if CONFIG.DISABLE_MAGIC_LINK_AUTH:
         raise Forbidden("Magic-link authentication is disabled for this datalab instance.")
 
-    args = request.args
-    token = args.get("token")
+    token = request.form.get("token")
     if not token:
         raise ValueError("Token not provided")
 
     now = datetime.datetime.now(tz=datetime.timezone.utc)
-
-    magic_link = flask_mongo.db.magic_links.find_one_and_update(
-        {"jwt": token, "$or": [{"used_at": None}, {"used_at": {"$exists": False}}]},
-        {"$set": {"used_at": now}},
-    )
-    if not magic_link:
-        if flask_mongo.db.magic_links.find_one({"jwt": token}):
-            raise ValueError("Token has already been used, please request a new one.")
-        raise ValueError("Token not found, please request a new one.")
 
     data = jwt.decode(
         token,
@@ -842,6 +832,15 @@ def email_logged_in():
     email = data["email"]
     if not email:
         raise BadRequest("No email found; please request a new token.")
+
+    magic_link = flask_mongo.db.magic_links.find_one_and_update(
+        {"jwt": token, "$or": [{"used_at": None}, {"used_at": {"$exists": False}}]},
+        {"$set": {"used_at": now}},
+    )
+    if not magic_link:
+        if flask_mongo.db.magic_links.find_one({"jwt": token}):
+            raise ValueError("Token has already been used, please request a new one.")
+        raise ValueError("Token not found, please request a new one.")
 
     # If the email domain list is explicitly configured to None, this allows any
     # email address to make an active account, otherwise the email domain must match
@@ -869,9 +868,8 @@ def email_logged_in():
     )
 
     if CONFIG.APP_URL:
-        return redirect(CONFIG.APP_URL, 307)
-    referer = request.headers.get("Referer", CONFIG.ROOT_PATH or "/")
-    return redirect(referer, 307)
+        return redirect(CONFIG.APP_URL, 303)
+    return redirect(CONFIG.ROOT_PATH or "/", 303)
 
 
 @oauth_authorized.connect_via(OAUTH[IdentityType.GITHUB])
