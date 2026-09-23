@@ -85,7 +85,20 @@ Beyond data blocks, a deployment can register **custom item types**: new top-lev
 
 A custom item type is a subclass either of an existing item model (to extend it) or of the base `Item` model (for a wholly new type).
 At a minimum, it **must** declare its own `type` literal, which must not collide with a built-in type.
-Custom types are namespaced with a leading underscore, reserving the un-prefixed namespace for built-in types; a type that does not already have one has it added at registration (so `my_samples` is served as `_my_samples`):
+Its identifier must be a lowercase, namespace-qualified slug of the form
+`<namespace>-<type-name>`, matching `^[a-z0-9]+(?:-[a-z0-9]+)+$`; examples include
+`battery-electrode` and `battery-coin-cell`. The complete slug is the canonical type identifier:
+it must be used wherever the type is referenced, including Python models, REST payloads and URLs,
+database documents, relationships, constituents, schemas and the web UI. The namespace and type
+name are conceptual components of the naming convention only; they are not stored or queried
+separately.
+
+Existing core identifiers such as `samples` and `cells` remain bare and are exempt from this
+custom-type rule. Future core types may also be bare or use a `core-...` slug. Consequently,
+`core-` is reserved and cannot be used as a custom namespace. Choose a stable namespace owned by
+the plugin or domain, because changing a type identifier changes stored data and API references.
+Each model declares its complete slug; a package may reuse one namespace for all of its models or
+publish models under different namespaces.
 
 ```python
 from typing import Literal
@@ -96,7 +109,7 @@ from pydatalab.models.samples import Sample
 
 
 class MySample(Sample):
-    type: Literal["my_samples"] = "my_samples"
+    type: Literal["example-samples"] = "example-samples"
 
     drying_time: float | None = Field(
         None,
@@ -116,7 +129,7 @@ There are two ways to register a custom item type, both of which run at server s
     ```toml
     # pyproject.toml of the plugin package
     [project.entry-points."pydatalab.item_types"]
-    my_samples = "my_plugin.models:MySample"
+    example-samples = "my_plugin.models:MySample"
     ```
 
 2. **From the server config**, by listing dotted import paths
@@ -204,7 +217,7 @@ class Solution(Sample):
             "datalab_ui_color": "#3a7ca5",
         },
     )
-    type: Literal["solutions"] = "solutions"
+    type: Literal["chemistry-solutions"] = "chemistry-solutions"
 
     # Fields linking to a built-in `starting_materials` or another `samples` item:
     solute: EntryReference | None = Field(
@@ -290,6 +303,13 @@ not changed:
 uv run invoke dev.collect-plugin-panels
 ```
 
+The generated panel registry uses the model's exact type slug. Because dashed JavaScript property
+names are not identifiers, these keys are quoted, for example:
+
+```js
+"chemistry-mixed-solutions": () => import("./my_plugin/MixedSolutionPanel.vue"),
+```
+
 The panel receives two props, `item_id` and `itemType`, and reads/writes the item through the
 Vuex store — exactly like the built-in information components:
 
@@ -310,7 +330,7 @@ Reuse datalab's building blocks rather than rebuilding them, imported via the `@
 alias: `ItemSelect` (item search), `FormattedItemName` (the type-coloured item badge + link),
 `TooltipIcon`, and so on. The separate
 [`datalab-item-plugin-example-custom-vue`](https://github.com/Matgenix/datalab-item-plugin-example-custom-vue)
-repository provides a complete `MixedSolutionPanel.vue`: it references `solutions` items from the
+repository provides a complete `MixedSolutionPanel.vue`: it references solution items from the
 companion schema-only example, pulls their concentrations via `getItemData`, and computes the
 resulting mixture live — none of which the core panel can do on its own.
 
