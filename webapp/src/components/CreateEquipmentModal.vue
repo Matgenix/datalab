@@ -19,17 +19,13 @@
             <label for="create-equipment-modal-item-type-select" class="col-form-label"
               >Type:</label
             >
-            <select
-              id="create-equipment-modal-item-type-select"
+            <ItemTypeSelect
               v-model="item_type"
-              class="form-control"
+              input-id="create-equipment-modal-item-type-select"
+              :types="availableTypes"
               required
               disabled
-            >
-              <option v-for="(obj, type) in availableTypes" :key="type" :value="type">
-                {{ obj.display }}
-              </option>
-            </select>
+            />
           </div>
           <div class="form-group col-md-6">
             <label for="create-equipment-modal-date" class="col-form-label">Date Created:</label>
@@ -99,6 +95,7 @@ import { DialogService } from "@/services/DialogService";
 
 import Modal from "@/components/Modal.vue";
 import ItemSelect from "@/components/ItemSelect.vue";
+import ItemTypeSelect from "@/components/ItemTypeSelect.vue";
 import { createNewItem } from "@/server_fetch_utils.js";
 import { validateEntryID } from "@/field_utils.js";
 import { itemTypes } from "@/resources.js";
@@ -108,6 +105,7 @@ export default {
   components: {
     Modal,
     ItemSelect,
+    ItemTypeSelect,
     // CollectionSelect,
   },
   props: {
@@ -126,7 +124,7 @@ export default {
       selectedItemToCopy: null,
       agesAgo: new Date("1970-01-01").toISOString().slice(0, -8), // a datetime for the unix epoch start
       //this is all just to filter an object in javascript:
-      availableTypes: { equipment: itemTypes["equipment"] },
+      availableTypes: ["equipment"],
     };
   },
   computed: {

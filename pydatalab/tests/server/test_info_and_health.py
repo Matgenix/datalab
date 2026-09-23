@@ -88,6 +88,16 @@ def test_types_info_endpoint(client):
     assert response.status_code == 404
 
 
+def test_types_info_includes_builtin_presentation_metadata(client):
+    response = client.get("/info/types/samples", follow_redirects=True)
+    assert response.status_code == 200
+
+    attributes = response.json["data"]["attributes"]
+    assert attributes["title"] == "Sample"
+    assert attributes["is_builtin"] is True
+    assert attributes["description"].startswith("A model for representing an experimental sample.")
+
+
 def test_info_endpoint_includes_max_upload_bytes(client, app):
     """Test that the /info endpoint includes the max_upload_bytes configuration."""
     response = client.get("/info")

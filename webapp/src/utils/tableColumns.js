@@ -1,7 +1,7 @@
 import { FilterOperator, FilterMatchMode } from "@primevue/core/api";
 
 import { formatRelativeDate } from "@/field_utils.js";
-import { itemTypes } from "@/resources.js";
+import { itemTypeTitle } from "@/resources.js";
 
 import BlocksIconCounter from "@/components/BlocksIconCounter";
 import ChemicalFormula from "@/components/ChemicalFormula";
@@ -11,6 +11,7 @@ import FilesIconCounter from "@/components/FilesIconCounter";
 import FormattedCollectionName from "@/components/FormattedCollectionName";
 import FormattedItemName from "@/components/FormattedItemName";
 import FormattedItemStatus from "@/components/FormattedItemStatus";
+import ItemTypeBadge from "@/components/ItemTypeBadge";
 import TagBadge from "@/components/TagBadge";
 import TagList from "@/components/TagList";
 
@@ -77,8 +78,7 @@ export const ITEM_ID_COLUMN = {
 
 /** The display label for an item type: the registered title for custom (plugin) types. */
 export function displayItemType(type) {
-  const itemType = itemTypes[type];
-  return itemType?.isDynamic ? itemType.display : type;
+  return itemTypeTitle(type);
 }
 
 /** The item type, filterable against the types actually present in the table. */
@@ -86,10 +86,20 @@ export const TYPE_COLUMN = {
   field: "type",
   header: "Type",
   label: "Type",
-  getValue: (row) => displayItemType(row.type),
+  body: {
+    component: ItemTypeBadge,
+    props: (row) => ({ type: row.type }),
+  },
   filter: {
     component: MultiSelectFilter,
-    componentProps: { optionLabel: "display", placeholder: "Select item types" },
+    componentProps: {
+      optionLabel: "display",
+      placeholder: "Select item types",
+      optionComponent: ItemTypeBadge,
+      optionProps: (option) => ({ type: option.type }),
+      valueComponent: ItemTypeBadge,
+      valueProps: (value) => ({ type: value.type }),
+    },
     match: matchByKey("type"),
     operator: FilterOperator.AND,
     options: (data) =>

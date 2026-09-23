@@ -241,7 +241,10 @@ describe("SampleTable Component Tests", () => {
           .eq(0)
           .within(() => {
             cy.get("td").eq(columnIndices["ID"]).should("contain.text", "sample1");
-            cy.get("td").eq(columnIndices["Type"]).should("contain.text", "samples");
+            cy.get("td")
+              .eq(columnIndices["Type"])
+              .find('[data-testid="item-type-badge"]')
+              .should("contain.text", "Sample");
             cy.get("td").eq(columnIndices["Name"]).should("contain.text", "Sample 1");
             cy.get("td").eq(columnIndices["Date"]).should("contain.text", "2023");
             cy.get("td").eq(columnIndices["Collections"]).find(".badge").should("have.length", 1);
@@ -253,7 +256,10 @@ describe("SampleTable Component Tests", () => {
           .eq(3)
           .within(() => {
             cy.get("td").eq(columnIndices["ID"]).should("contain.text", "cell1");
-            cy.get("td").eq(columnIndices["Type"]).should("contain.text", "cells");
+            cy.get("td")
+              .eq(columnIndices["Type"])
+              .find('[data-testid="item-type-badge"]')
+              .should("contain.text", "Cell");
             cy.get("td").eq(columnIndices["Name"]).should("contain.text", "Cell 1");
             cy.get("td").eq(columnIndices["Date"]).should("contain.text", "2023");
             cy.get("td").eq(columnIndices["Collections"]).find(".badge").should("have.length", 1);
@@ -374,12 +380,12 @@ describe("SampleTable Component Tests", () => {
           .eq(0)
           .find("td")
           .eq(columnIndices["Type"])
-          .should("contain.text", "cells");
+          .should("contain.text", "Cell");
         cy.get(".p-datatable-tbody tr")
           .eq(1)
           .find("td")
           .eq(columnIndices["Type"])
-          .should("contain.text", "cells");
+          .should("contain.text", "Cell");
 
         cy.get(".p-datatable-thead th")
           .eq(columnIndices["Type"])
@@ -389,12 +395,12 @@ describe("SampleTable Component Tests", () => {
           .eq(0)
           .find("td")
           .eq(columnIndices["Type"])
-          .should("contain.text", "samples");
+          .should("contain.text", "Sample");
         cy.get(".p-datatable-tbody tr")
           .eq(1)
           .find("td")
           .eq(columnIndices["Type"])
-          .should("contain.text", "samples");
+          .should("contain.text", "Sample");
 
         cy.get(".p-datatable-thead th")
           .eq(columnIndices["Status"])
@@ -776,14 +782,14 @@ describe("SampleTable Component Tests", () => {
   });
 
   it("filters by Type correctly", () => {
-    selectMultiselectOption(2, "samples");
+    selectMultiselectOption(2, "Sample");
     cy.get(".p-datatable-tbody tr").should("have.length", 3);
     cy.get(".p-datatable-tbody tr").eq(0).find("td").eq(1).should("contain.text", "sample1");
     cy.get(".p-datatable-tbody tr").eq(1).find("td").eq(1).should("contain.text", "sample2");
     cy.get(".p-datatable-tbody tr").eq(2).find("td").eq(1).should("contain.text", "sample3");
 
-    selectMultiselectOption(2, "samples", false);
-    selectMultiselectOption(2, "cells");
+    selectMultiselectOption(2, "Sample", false);
+    selectMultiselectOption(2, "Cell");
     cy.get(".p-datatable-tbody tr").should("have.length", 3);
     cy.get(".p-datatable-tbody tr").eq(0).find("td").eq(1).should("contain.text", "cell1");
     cy.get(".p-datatable-tbody tr").eq(1).find("td").eq(1).should("contain.text", "cell2");

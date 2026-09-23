@@ -39,11 +39,12 @@
           </div>
           <div class="form-group col-md-6">
             <label for="item-type-select" class="col-form-label">Type:</label>
-            <select id="item-type-select" v-model="item_type" class="form-control" required>
-              <option v-for="type in effectiveAllowedTypes" :key="type" :value="type">
-                {{ itemTypes[type].display }}
-              </option>
-            </select>
+            <ItemTypeSelect
+              v-model="item_type"
+              input-id="item-type-select"
+              :types="effectiveAllowedTypes"
+              required
+            />
           </div>
           <div class="form-group col-md-6 pt-0">
             <label for="create-item-date" class="col-form-label">Date Created:</label>
@@ -126,6 +127,7 @@ import { DialogService } from "@/services/DialogService";
 
 import Modal from "@/components/Modal.vue";
 import ItemSelect from "@/components/ItemSelect.vue";
+import ItemTypeSelect from "@/components/ItemTypeSelect.vue";
 import GroupSelect from "@/components/GroupSelect.vue";
 import UserSelect from "@/components/UserSelect.vue";
 import { createNewItem } from "@/server_fetch_utils.js";
@@ -137,6 +139,7 @@ export default {
   components: {
     Modal,
     ItemSelect,
+    ItemTypeSelect,
     CollectionSelect,
     GroupSelect,
     UserSelect,
@@ -167,9 +170,6 @@ export default {
     };
   },
   computed: {
-    itemTypes() {
-      return itemTypes;
-    },
     effectiveAllowedTypes() {
       // Custom/plugin item types all live in the Samples page for now. Keep them
       // out of the Inventory modal even when they inherit from StartingMaterial.

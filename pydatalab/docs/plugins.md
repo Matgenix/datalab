@@ -192,10 +192,15 @@ A few keys on the model's `model_config` control the type as a whole:
 
 | `ConfigDict(json_schema_extra=…)` / config key | Effect in the UI |
 |---|---|
-| `title` | display name of the type (navbar, create dialog) |
-| `datalab_ui_color` | accent colour for the navbar, field labels and the item's reference badge |
+| `title` | human-readable type name used in the navbar, type badge and create dialog |
+| `datalab_ui_color` | accent colour for the navbar, field labels and type-related badges |
 | `datalab_ui_hidden_fields` | base-component sections to hide (`status`, `collections`, `description`, `substance_information`, `synthesis_information`, `tags`, `location`) |
 | `datalab_section_title` | title of the default custom-fields card |
+
+The model class docstring becomes the type's JSON-Schema description. Keep it concise and useful to
+users: it is shown when they hover over or focus the type badge. The same tooltip identifies the
+type as built-in or custom, shows its complete canonical identifier, and, for a custom type, its
+base type. The canonical identifier remains the value used by the API and database.
 
 Only **scalar-like** fields are rendered automatically: strings, numbers, enums, booleans, unit
 quantities, and single item references. Lists, nested objects, computed values or charts need a

@@ -210,6 +210,8 @@ def _type_attributes(item_type: str, schema: dict) -> dict:
         "api_version": __api_version__,
         "schema": schema,
         "title": schema.get("title"),
+        "description": schema.get("description"),
+        "is_builtin": item_type in BUILTIN_ITEM_TYPES,
         "base_type": base_type,
         "base_fields": list(base_model.model_fields) if base_model is not None else [],
         "hidden_fields": extra.datalab_ui_hidden_fields or [],

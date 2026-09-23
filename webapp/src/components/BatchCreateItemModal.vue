@@ -25,16 +25,12 @@
                   <label for="batch-item-type-select" class="blue-label col-form-label mr-3">
                     Type:
                   </label>
-                  <select
-                    id="batch-item-type-select"
+                  <ItemTypeSelect
                     v-model="item_type"
-                    class="form-control"
+                    input-id="batch-item-type-select"
+                    :types="allowedTypes"
                     required
-                  >
-                    <option v-for="type in allowedTypes" :key="type" :value="type">
-                      {{ itemTypes[type].display }}
-                    </option>
-                  </select>
+                  />
                 </div>
                 <div class="input-group col-lg-3 col-6">
                   <label for="batchItemNRows" class="blue-label col-form-label text-left mb-2 mr-3">
@@ -341,14 +337,16 @@
 import Modal from "@/components/Modal.vue";
 import { DialogService } from "@/services/DialogService.js";
 import ItemSelect from "@/components/ItemSelect.vue";
+import ItemTypeSelect from "@/components/ItemTypeSelect.vue";
 import { createNewSamples } from "@/server_fetch_utils.js";
 import { validateEntryID } from "@/field_utils.js";
-import { itemTypes, SAMPLE_TABLE_TYPES, AUTOMATICALLY_GENERATE_ID_DEFAULT } from "@/resources.js";
+import { SAMPLE_TABLE_TYPES, AUTOMATICALLY_GENERATE_ID_DEFAULT } from "@/resources.js";
 export default {
   name: "BatchCreateItemModal",
   components: {
     Modal,
     ItemSelect,
+    ItemTypeSelect,
   },
   props: {
     modelValue: Boolean,
@@ -418,9 +416,6 @@ export default {
     };
   },
   computed: {
-    itemTypes() {
-      return itemTypes;
-    },
     takenSampleIds() {
       return this.$store.state.sample_list
         ? this.$store.state.sample_list.map((x) => x.item_id)

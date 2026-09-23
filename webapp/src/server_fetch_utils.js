@@ -1438,6 +1438,8 @@ export async function loadItemSchemas() {
     supportedTypes.forEach((typeInfo) =>
       registerDynamicItemType(typeInfo.id, {
         title: typeInfo.attributes?.title,
+        description: typeInfo.attributes?.description,
+        is_builtin: typeInfo.attributes?.is_builtin,
         base_type: typeInfo.attributes?.base_type,
         hidden_fields: typeInfo.attributes?.hidden_fields,
         ui_color: typeInfo.attributes?.ui_color,

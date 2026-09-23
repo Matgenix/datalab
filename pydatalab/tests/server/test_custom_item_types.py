@@ -77,6 +77,16 @@ def test_custom_types_listed_in_info_types(client, custom_item_models):
     assert "height" in item_schema["properties"]
 
 
+def test_custom_type_info_includes_presentation_metadata(client, custom_item_models):
+    response = client.get("/info/types/example-samples", follow_redirects=True)
+    assert response.status_code == 200
+
+    attributes = response.json["data"]["attributes"]
+    assert attributes["is_builtin"] is False
+    assert attributes["base_type"] == "samples"
+    assert attributes["description"].startswith("An example custom sample type")
+
+
 def test_create_and_read_custom_sample(client, custom_item_models):
     """A custom Sample subclass can be created and round-tripped, including a
     nested custom field, through the generic endpoints."""

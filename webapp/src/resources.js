@@ -169,6 +169,11 @@ export function prettifyType(type) {
     .trim();
 }
 
+export function itemTypeTitle(type) {
+  const itemType = itemTypes[type];
+  return itemType?.title || itemType?.navbarName || prettifyType(type);
+}
+
 // Lighten a hex colour toward white to produce a pastel badge/tint background,
 // mirroring the hand-picked `lightColor` pastels of the built-in types. Used to give
 // custom (plugin) types a coloured badge derived from their `datalab_ui_color`.
@@ -185,13 +190,27 @@ function lightTint(hex, amount = 0.82) {
 }
 
 // Register a custom/plugin item type (one served by the backend but not hardcoded
-// above) into the shared `itemTypes` registry.
+// above) into the shared `itemTypes` registry, or hydrate a built-in entry with
+// presentation metadata returned by `/info/types`.
 // - base_type: the built-in type string this model inherits from (e.g. "samples")
 // - hidden_fields: base-component fields the plugin wants to hide (from model_config)
 // - title: human-readable display name
 // - ui_color: accent color for navbar/labels (`datalab_ui_color` on model_config)
-export function registerDynamicItemType(type, { title, base_type, hidden_fields, ui_color } = {}) {
-  if (!type || itemTypes[type]) return; // never clobber a built-in / existing entry
+export function registerDynamicItemType(
+  type,
+  { title, description, is_builtin, base_type, hidden_fields, ui_color } = {},
+) {
+  if (!type) return;
+
+  if (itemTypes[type]) {
+    const itemType = itemTypes[type];
+    itemType.title = itemType.navbarName || title || prettifyType(type);
+    itemType.description = description || null;
+    itemType.isBuiltin = is_builtin ?? !itemType.isDynamic;
+    itemType.baseType = base_type || itemType.baseType || null;
+    return;
+  }
+
   const display = title || prettifyType(type);
   const color = ui_color || "#4a4a4a";
   itemTypes[type] = {
@@ -201,6 +220,9 @@ export function registerDynamicItemType(type, { title, base_type, hidden_fields,
     lightColor: lightTint(color),
     labelColor: color,
     isCreateable: true,
+    title: display,
+    description: description || null,
+    isBuiltin: is_builtin ?? false,
     display: display.toLowerCase(),
     isDynamic: true,
     baseType: base_type || null,
