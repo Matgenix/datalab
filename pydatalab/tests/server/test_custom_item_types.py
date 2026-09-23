@@ -368,7 +368,7 @@ def test_slug_is_canonical_type_identifier():
 
 
 def test_multi_part_slug_is_registered():
-    """The local part of a namespaced slug may contain additional dashes."""
+    """The type name in a namespace-qualified slug may contain additional dashes."""
     from typing import Literal
 
     from pydatalab.models import ITEM_MODELS, ITEM_SCHEMAS, register_item_model
