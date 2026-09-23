@@ -142,12 +142,9 @@ def _panel_name(entry_point_value: str) -> str:
 
 
 def _panel_item_type(entry_point) -> str:
-    """Return the server-facing type registered for an item plugin panel."""
+    """Return the exact type declared by an item plugin model."""
     model = entry_point.load()
-    item_type = model.model_json_schema()["properties"]["type"]["default"]
-    if not item_type.startswith("_"):
-        item_type = f"_{item_type}"
-    return item_type
+    return model.model_json_schema()["properties"]["type"]["default"]
 
 
 def _write_plugin_panel_index(path: pathlib.Path, registered: dict[str, str]) -> None:
@@ -158,7 +155,7 @@ def _write_plugin_panel_index(path: pathlib.Path, registered: dict[str, str]) ->
         "export const PLUGIN_PANELS = {",
     ]
     for type_name, import_path in sorted(registered.items()):
-        lines.append(f'  {type_name}: () => import("{import_path}"),')
+        lines.append(f"  {json.dumps(type_name)}: () => import({json.dumps(import_path)}),")
     lines.append("};")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
