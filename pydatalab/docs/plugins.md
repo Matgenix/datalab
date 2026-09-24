@@ -85,20 +85,19 @@ Beyond data blocks, a deployment can register **custom item types**: new top-lev
 
 A custom item type is a subclass either of an existing item model (to extend it) or of the base `Item` model (for a wholly new type).
 At a minimum, it **must** declare its own `type` literal, which must not collide with a built-in type.
-Its identifier must be a lowercase, namespace-qualified slug of the form
-`<namespace>-<type-name>`, matching `^[a-z0-9]+(?:-[a-z0-9]+)+$`; examples include
-`battery-electrode` and `battery-coin-cell`. The complete slug is the canonical type identifier:
+Its identifier must have the form `<namespace>:<type-name>`, matching
+`^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$`; examples include
+`battery:electrode` and `battery:coin-cell`. The complete value is the canonical type identifier:
 it must be used wherever the type is referenced, including Python models, REST payloads and URLs,
 database documents, relationships, constituents, schemas and the web UI. The namespace and type
 name are conceptual components of the naming convention only; they are not stored or queried
 separately.
 
 Existing core identifiers such as `samples` and `cells` remain bare and are exempt from this
-custom-type rule. Future core types may also be bare or use a `core-...` slug. Consequently,
-`core-` is reserved and cannot be used as a custom namespace. Choose a stable namespace owned by
+custom-type rule. All built-in item types use bare identifiers. Choose a stable namespace owned by
 the plugin or domain, because changing a type identifier changes stored data and API references.
-Each model declares its complete slug; a package may reuse one namespace for all of its models or
-publish models under different namespaces.
+Each model declares its complete identifier; a package may reuse one namespace for all of its
+models or publish models under different namespaces.
 
 ```python
 from typing import Literal
@@ -109,7 +108,7 @@ from pydatalab.models.samples import Sample
 
 
 class MySample(Sample):
-    type: Literal["example-samples"] = "example-samples"
+    type: Literal["example:samples"] = "example:samples"
 
     drying_time: float | None = Field(
         None,
@@ -131,6 +130,9 @@ There are two ways to register a custom item type, both of which run at server s
     [project.entry-points."pydatalab.item_types"]
     example-samples = "my_plugin.models:MySample"
     ```
+
+   The entry-point key is a packaging-safe discovery name. The model's `type` literal is the
+   canonical item type identifier.
 
 2. **From the server config**, by listing dotted import paths
    (`package.module:ClassName`) in `CUSTOM_ITEM_MODELS` — convenient for models
@@ -303,11 +305,11 @@ not changed:
 uv run invoke dev.collect-plugin-panels
 ```
 
-The generated panel registry uses the model's exact type slug. Because dashed JavaScript property
-names are not identifiers, these keys are quoted, for example:
+The generated panel registry uses the model's exact type identifier. Because colon-separated names
+are not JavaScript identifiers, these keys are quoted, for example:
 
 ```js
-"chemistry-mixed-solutions": () => import("./my_plugin/MixedSolutionPanel.vue"),
+"chemistry:mixed-solutions": () => import("./my_plugin/MixedSolutionPanel.vue"),
 ```
 
 The panel receives two props, `item_id` and `itemType`, and reads/writes the item through the

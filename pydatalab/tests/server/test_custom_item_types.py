@@ -56,10 +56,10 @@ def test_custom_types_listed_in_info_types(client, custom_item_models):
     assert response.status_code == 200
 
     types = {entry["id"] for entry in response.json["data"]}
-    assert "example-samples" in types
-    assert "example-items" in types
+    assert "example:samples" in types
+    assert "example:items" in types
 
-    sample_schema = client.get("/info/types/example-samples", follow_redirects=True).json["data"][
+    sample_schema = client.get("/info/types/example:samples", follow_redirects=True).json["data"][
         "attributes"
     ]["schema"]
     properties = sample_schema["properties"]
@@ -70,7 +70,7 @@ def test_custom_types_listed_in_info_types(client, custom_item_models):
     # The summary flag is carried through into the schema.
     assert properties["drying_time"].get("datalab_include_field_in_summary") is True
 
-    item_schema = client.get("/info/types/example-items", follow_redirects=True).json["data"][
+    item_schema = client.get("/info/types/example:items", follow_redirects=True).json["data"][
         "attributes"
     ]["schema"]
     assert "width" in item_schema["properties"]
@@ -84,7 +84,7 @@ def test_create_and_read_custom_sample(client, custom_item_models):
         "/new-sample/",
         json={
             "new_sample_data": {
-                "type": "example-samples",
+                "type": "example:samples",
                 "item_id": "custom-sample-1",
                 "drying_time": 3.5,
                 "custom_properties": {"batch": "B7", "purity": 0.95},
@@ -93,13 +93,13 @@ def test_create_and_read_custom_sample(client, custom_item_models):
     )
     assert response.status_code == 201, response.json
     assert response.json["status"] == "success"
-    assert response.json["sample_list_entry"]["type"] == "example-samples"
+    assert response.json["sample_list_entry"]["type"] == "example:samples"
     assert response.json["sample_list_entry"]["drying_time"] == 3.5
 
     response = client.get("/get-item-data/custom-sample-1")
     assert response.status_code == 200, response.json
     item_data = response.json["item_data"]
-    assert item_data["type"] == "example-samples"
+    assert item_data["type"] == "example:samples"
     assert item_data["drying_time"] == 3.5
     assert item_data["custom_properties"]["batch"] == "B7"
     assert item_data["custom_properties"]["purity"] == 0.95
@@ -107,7 +107,7 @@ def test_create_and_read_custom_sample(client, custom_item_models):
     response = client.get("/samples/")
     assert response.status_code == 200, response.json
     summaries = {item["item_id"]: item for item in response.json["samples"]}
-    assert summaries["custom-sample-1"]["type"] == "example-samples"
+    assert summaries["custom-sample-1"]["type"] == "example:samples"
     assert summaries["custom-sample-1"]["drying_time"] == 3.5
 
 
@@ -117,7 +117,7 @@ def test_create_wholly_custom_item(client, custom_item_models):
         "/new-sample/",
         json={
             "new_sample_data": {
-                "type": "example-items",
+                "type": "example:items",
                 "item_id": "custom-item-1",
                 "width": 12.0,
                 "height": 4.0,
@@ -130,7 +130,7 @@ def test_create_wholly_custom_item(client, custom_item_models):
     response = client.get("/get-item-data/custom-item-1")
     assert response.status_code == 200, response.json
     item_data = response.json["item_data"]
-    assert item_data["type"] == "example-items"
+    assert item_data["type"] == "example:items"
     assert item_data["width"] == 12.0
     assert item_data["height"] == 4.0
 
@@ -139,7 +139,7 @@ def test_create_wholly_custom_item(client, custom_item_models):
     response = client.get("/samples/")
     assert response.status_code == 200, response.json
     listed_items = {item["item_id"]: item for item in response.json["samples"]}
-    assert listed_items["custom-item-1"]["type"] == "example-items"
+    assert listed_items["custom-item-1"]["type"] == "example:items"
 
 
 def test_custom_type_as_synthesis_constituent(client, custom_item_models):
@@ -150,7 +150,7 @@ def test_custom_type_as_synthesis_constituent(client, custom_item_models):
         "/new-sample/",
         json={
             "new_sample_data": {
-                "type": "example-samples",
+                "type": "example:samples",
                 "item_id": "custom-constituent-1",
                 "name": "A custom precursor",
             }
@@ -166,7 +166,7 @@ def test_custom_type_as_synthesis_constituent(client, custom_item_models):
                 "item_id": "sample-with-custom-constituent",
                 "synthesis_constituents": [
                     {
-                        "item": {"item_id": "custom-constituent-1", "type": "example-samples"},
+                        "item": {"item_id": "custom-constituent-1", "type": "example:samples"},
                         "quantity": 1.0,
                         "unit": "g",
                     }
@@ -189,7 +189,7 @@ def test_custom_type_as_synthesis_constituent(client, custom_item_models):
     ]
     assert len(parents) == 1
     assert parents[0]["item_id"] == "custom-constituent-1"
-    assert parents[0]["type"] == "example-samples"
+    assert parents[0]["type"] == "example:samples"
 
 
 def test_equipment_rejected_as_synthesis_constituent(client):
@@ -212,7 +212,7 @@ def test_unknown_custom_type_rejected(client, custom_item_models):
     endpoint."""
     response = client.post(
         "/new-sample/",
-        json={"new_sample_data": {"type": "missing-type", "item_id": "bad-1"}},
+        json={"new_sample_data": {"type": "missing:type", "item_id": "bad-1"}},
     )
     assert response.status_code == 400, response.json
 
@@ -232,15 +232,17 @@ def test_bad_custom_item_type_rejected():
     with pytest.raises(ValueError, match="reserved built-in type"):
         register_item_model(ClashingSample)
 
-    class ReservedCoreSample(Sample):
-        type: Literal["core-electrode"] = "core-electrode"  # type: ignore[assignment]
-
-    with pytest.raises(ValueError, match="reserved core namespace"):
-        register_item_model(ReservedCoreSample)
-
     # Anything that is not an `Item` subclass is also rejected.
     with pytest.raises(TypeError):
         register_item_model(dict)
+
+
+def test_builtin_item_type_identifiers_are_bare():
+    """Built-in identifiers do not use the custom namespace separator."""
+    from pydatalab.models import BUILTIN_ITEM_TYPES
+
+    assert all(":" not in item_type for item_type in BUILTIN_ITEM_TYPES)
+    assert all(not item_type.startswith("core-") for item_type in BUILTIN_ITEM_TYPES)
 
 
 @pytest.mark.parametrize(
@@ -248,15 +250,21 @@ def test_bad_custom_item_type_rejected():
     [
         "electrode",
         "battery_electrode",
-        "Battery-electrode",
-        "battery--electrode",
-        "-battery-electrode",
-        "battery-electrode-",
+        "Battery:electrode",
+        "battery:Electrode",
+        "battery::electrode",
+        "battery:electrode:variant",
+        ":electrode",
+        "battery:",
+        "acme--battery:electrode",
+        "battery:coin--cell",
+        "battery:coin_cell",
         "battery.electrode",
+        "battery:electrode.variant",
     ],
 )
-def test_invalid_custom_item_type_slug_rejected(item_type):
-    """Custom type identifiers must be lowercase namespace-qualified slugs."""
+def test_invalid_custom_item_type_identifier_rejected(item_type):
+    """Custom identifiers contain one colon between lowercase name components."""
     from typing import Literal
 
     from pydantic import create_model
@@ -276,7 +284,7 @@ def test_invalid_custom_item_type_slug_rejected(item_type):
 
 def test_info_types_base_type_for_custom_types(client, custom_item_models):
     """Custom types advertise their UI base and inherited fields."""
-    attrs = client.get("/info/types/example-samples", follow_redirects=True).json["data"][
+    attrs = client.get("/info/types/example:samples", follow_redirects=True).json["data"][
         "attributes"
     ]
     assert attrs["base_type"] == "samples"
@@ -287,7 +295,7 @@ def test_info_types_base_type_for_custom_types(client, custom_item_models):
 
     # Direct Item subclasses use the virtual `items` UI base. It is metadata for
     # selecting the generic component, not a concrete type exposed in ITEM_MODELS.
-    attrs = client.get("/info/types/example-items", follow_redirects=True).json["data"][
+    attrs = client.get("/info/types/example:items", follow_redirects=True).json["data"][
         "attributes"
     ]
     assert attrs["base_type"] == "items"
@@ -326,31 +334,31 @@ def test_extra_fields_on_builtin_sample_are_ignored(client):
     assert "custom_properties" not in item_data
 
 
-def test_slug_is_canonical_type_identifier():
-    """The model, registry and schema use the same canonical slug."""
+def test_namespaced_identifier_is_canonical():
+    """The model, registry and schema use the same canonical identifier."""
     from typing import Literal
 
     from pydatalab.models import ITEM_MODELS, ITEM_SCHEMAS, register_item_model
     from pydatalab.models.samples import Sample
 
     class BatteryElectrode(Sample):
-        type: Literal["battery-electrode"] = "battery-electrode"  # type: ignore[assignment]
+        type: Literal["battery:electrode"] = "battery:electrode"  # type: ignore[assignment]
 
     class ConflictingBatteryElectrode(Sample):
-        type: Literal["battery-electrode"] = "battery-electrode"  # type: ignore[assignment]
+        type: Literal["battery:electrode"] = "battery:electrode"  # type: ignore[assignment]
 
     try:
         register_item_model(BatteryElectrode)
 
-        assert ITEM_MODELS["battery-electrode"] is BatteryElectrode
+        assert ITEM_MODELS["battery:electrode"] is BatteryElectrode
         assert (
-            ITEM_SCHEMAS["battery-electrode"]["properties"]["type"]["default"]
-            == "battery-electrode"
+            ITEM_SCHEMAS["battery:electrode"]["properties"]["type"]["default"]
+            == "battery:electrode"
         )
 
-        item = BatteryElectrode(item_id="canonical-slug")
-        assert item.type == "battery-electrode"
-        assert item.model_dump()["type"] == "battery-electrode"
+        item = BatteryElectrode(item_id="canonical-identifier")
+        assert item.type == "battery:electrode"
+        assert item.model_dump()["type"] == "battery:electrode"
         assert isinstance(item, Sample)
 
         # Registering a custom subclass must not disturb its built-in base.
@@ -358,34 +366,34 @@ def test_slug_is_canonical_type_identifier():
         assert Sample(item_id="still-a-sample").type == "samples"
 
         register_item_model(BatteryElectrode)
-        assert ITEM_MODELS["battery-electrode"] is BatteryElectrode
+        assert ITEM_MODELS["battery:electrode"] is BatteryElectrode
 
         with pytest.raises(ValueError, match="already registered"):
             register_item_model(ConflictingBatteryElectrode)
     finally:
-        ITEM_MODELS.pop("battery-electrode", None)
-        ITEM_SCHEMAS.pop("battery-electrode", None)
+        ITEM_MODELS.pop("battery:electrode", None)
+        ITEM_SCHEMAS.pop("battery:electrode", None)
 
 
-def test_multi_part_slug_is_registered():
-    """The type name in a namespace-qualified slug may contain additional dashes."""
+def test_hyphenated_namespace_and_type_name_are_registered():
+    """Either side of the namespace separator may contain internal dashes."""
     from typing import Literal
 
     from pydatalab.models import ITEM_MODELS, ITEM_SCHEMAS, register_item_model
     from pydatalab.models.samples import Sample
 
     class BatteryCoinCell(Sample):
-        type: Literal["battery-coin-cell"] = "battery-coin-cell"  # type: ignore[assignment]
+        type: Literal["acme-battery:coin-cell"] = "acme-battery:coin-cell"  # type: ignore[assignment]
 
     try:
         register_item_model(BatteryCoinCell)
-        assert ITEM_MODELS["battery-coin-cell"] is BatteryCoinCell
-        assert ITEM_SCHEMAS["battery-coin-cell"]["properties"]["type"]["default"] == (
-            "battery-coin-cell"
+        assert ITEM_MODELS["acme-battery:coin-cell"] is BatteryCoinCell
+        assert ITEM_SCHEMAS["acme-battery:coin-cell"]["properties"]["type"]["default"] == (
+            "acme-battery:coin-cell"
         )
     finally:
-        ITEM_MODELS.pop("battery-coin-cell", None)
-        ITEM_SCHEMAS.pop("battery-coin-cell", None)
+        ITEM_MODELS.pop("acme-battery:coin-cell", None)
+        ITEM_SCHEMAS.pop("acme-battery:coin-cell", None)
 
 
 def test_refresh_item_models_ignores_custom_types(custom_item_models):
@@ -400,15 +408,15 @@ def test_refresh_item_models_ignores_custom_types(custom_item_models):
     class NeverRegisteredSample(Sample):
         """A valid custom model that has been imported but not registered."""
 
-        type: Literal["unregistered-sample"] = "unregistered-sample"  # type: ignore[assignment]
+        type: Literal["unregistered:sample"] = "unregistered:sample"  # type: ignore[assignment]
 
     refresh_item_models()
 
-    assert "unregistered-sample" not in ITEM_MODELS
-    assert "unregistered-sample" not in ITEM_SCHEMAS
+    assert "unregistered:sample" not in ITEM_MODELS
+    assert "unregistered:sample" not in ITEM_SCHEMAS
 
     assert "samples" in ITEM_MODELS
-    assert "example-samples" in ITEM_MODELS
-    assert "example-samples" in ITEM_SCHEMAS
-    assert "example-items" in ITEM_MODELS
-    assert "example-items" in ITEM_SCHEMAS
+    assert "example:samples" in ITEM_MODELS
+    assert "example:samples" in ITEM_SCHEMAS
+    assert "example:items" in ITEM_MODELS
+    assert "example:items" in ITEM_SCHEMAS

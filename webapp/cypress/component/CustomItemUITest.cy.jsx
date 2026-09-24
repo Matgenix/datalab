@@ -4,8 +4,8 @@ import CreateItemModal from "@/components/CreateItemModal.vue";
 import CustomFieldsPanel from "@/components/custom/CustomFieldsPanel.vue";
 import { itemTypes, prettifyType, registerDynamicItemType } from "@/resources.js";
 
-const DIRECT_TYPE = "component-test-direct-item";
-const EQUIPMENT_TYPE = "component-test-equipment-item";
+const DIRECT_TYPE = "component-test:direct-item";
+const EQUIPMENT_TYPE = "component-test:equipment-item";
 
 describe("Custom item UI", () => {
   afterEach(() => {
@@ -14,7 +14,7 @@ describe("Custom item UI", () => {
   });
 
   it("prettifies custom and core type names", () => {
-    expect(prettifyType("battery-coin-cell")).to.equal("Battery Coin Cell");
+    expect(prettifyType("battery:coin-cell")).to.equal("Battery Coin Cell");
     expect(prettifyType("starting_materials")).to.equal("Starting Materials");
   });
 

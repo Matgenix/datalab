@@ -70,10 +70,10 @@ ITEM_SCHEMAS: dict[str, dict] = {}
 # `refresh_item_models` below, which is the only call made before it is set.
 BUILTIN_ITEM_TYPES: frozenset[str] = frozenset()
 
-# Custom item types use a namespace-qualified slug (e.g. ``battery-electrode``).
+# Custom item types use a namespace-qualified identifier (e.g. ``battery:electrode``).
 # Core models are registered before this validation is applied and retain
 # their established identifiers.
-CUSTOM_ITEM_TYPE_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")
+CUSTOM_ITEM_TYPE_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def refresh_item_models() -> None:
@@ -112,9 +112,9 @@ def register_item_model(model: type[Item]) -> None:
     """Register a custom `Item` subclass into the global registries in place.
 
     Validates that `model` is a concrete `Item` subclass declaring its own
-    unique, namespace-qualified `type` slug that does not collide with a
-    built-in type. The declared slug is used as the registry key. Safe to call
-    repeatedly with the same model.
+    unique, namespace-qualified `type` identifier that does not collide with a
+    built-in type. The declared identifier is used as the registry key. Safe to
+    call repeatedly with the same model.
     """
     if not (isinstance(model, type) and issubclass(model, Item)):
         raise TypeError(f"{model!r} must be a subclass of Item to be registered as an item type.")
@@ -133,14 +133,8 @@ def register_item_model(model: type[Item]) -> None:
     if not isinstance(item_type, str) or CUSTOM_ITEM_TYPE_PATTERN.fullmatch(item_type) is None:
         raise ValueError(
             f"Custom item model {model.__name__!r} uses invalid type {item_type!r}; "
-            "custom types must be lowercase namespace-qualified slugs such as "
-            "'battery-electrode'."
-        )
-
-    if item_type.startswith("core-"):
-        raise ValueError(
-            f"Custom item model {model.__name__!r} uses reserved core namespace in type "
-            f"{item_type!r}; custom types must use their own namespace."
+            "custom types must use a lowercase namespace and type name separated by one colon, "
+            "such as 'battery:electrode'."
         )
 
     existing = ITEM_MODELS.get(item_type)
