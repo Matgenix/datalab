@@ -4,12 +4,64 @@
       Server Error. Sample list not retrieved.
     </div>
 
+    <DynamicDataTableButtons
+      :data-type="dataType"
+      :items-selected="itemsSelected"
+      :displayed-item-count="filteredItemCount"
+      :filters="filters"
+      :editable-inventory="editable_inventory"
+      :show-buttons="showButtons"
+      :available-columns="availableColumns"
+      :selected-columns="selectedColumns"
+      :collection-id="collectionId"
+      :all-users="allUsers"
+      :advanced-query-config="advancedQueryConfig"
+      :active-quick-filters="activeQuickFilters"
+      :group-by-fields="groupByFields"
+      @update:filters="updateFilters"
+      @update:selected-columns="onToggleColumns"
+      @open-create-item-modal="createItemModalIsOpen = true"
+      @open-batch-create-item-modal="batchCreateItemModalIsOpen = true"
+      @open-qr-scanner-modal="qrScannerModalIsOpen = true"
+      @open-create-collection-modal="createCollectionModalIsOpen = true"
+      @open-create-equipment-modal="createEquipmentModalIsOpen = true"
+      @open-create-tag-modal="$emit('open-create-tag-modal')"
+      @open-add-to-collection-modal="addToCollectionModalIsOpen = true"
+      @open-batch-share-modal="batchShareModalIsOpen = true"
+      @delete-selected-items="deleteSelectedItems"
+      @remove-selected-items-from-collection="removeSelectedItemsFromCollection"
+      @reset-table="handleResetTable"
+      @users-data-changed="$emit('users-data-changed')"
+      @bulk-invalidate-tokens="handleItemsUpdated"
+      @bulk-delete-groups="$emit('groups-data-changed')"
+      @advanced-query-results="handleAdvancedQueryResults"
+      @update:active-quick-filters="onUpdateQuickFilters"
+      @update:group-by-fields="onUpdateGroupByFields"
+    />
+
+    <!-- Grouping is a display mode over the same filtered rows the table computes below,
+         not a separate data source: it reads `filteredData`, the output of DataTable's own
+         filter pass (column filters + global search), so switching to Group By never
+         silently drops the active search/filters. -->
+    <GroupedDataTable
+      v-if="groupByFields.length"
+      :items="filteredData"
+      :group-fields="groupByFields"
+      :items-selected="itemsSelected"
+      :columns="availableColumns"
+      @update:items-selected="itemsSelected = $event"
+      @row-click="goToEditPageFromGroup"
+    />
+
+    <!-- Kept mounted (not v-if) even while grouped, so its @filter keeps firing and
+         `filteredData` stays correct for GroupedDataTable above. -->
     <DataTable
+      v-show="!groupByFields.length"
       ref="datatable"
       v-model:filters="filters"
       v-model:selection="itemsSelected"
       v-model:select-all="allSelected"
-      :value="data"
+      :value="displayedData"
       :data-testid="computedDataTestId"
       selection-mode="checkbox"
       paginator
@@ -34,36 +86,6 @@
       @page="onPageChange"
       @sort="onSort"
     >
-      <template #header>
-        <DynamicDataTableButtons
-          :data-type="dataType"
-          :items-selected="itemsSelected"
-          :displayed-item-count="filteredItemCount"
-          :filters="filters"
-          :editable-inventory="editable_inventory"
-          :show-buttons="showButtons"
-          :available-columns="availableColumns"
-          :selected-columns="selectedColumns"
-          :collection-id="collectionId"
-          :all-users="allUsers"
-          @update:filters="updateFilters"
-          @update:selected-columns="onToggleColumns"
-          @open-create-item-modal="createItemModalIsOpen = true"
-          @open-batch-create-item-modal="batchCreateItemModalIsOpen = true"
-          @open-qr-scanner-modal="qrScannerModalIsOpen = true"
-          @open-create-collection-modal="createCollectionModalIsOpen = true"
-          @open-create-equipment-modal="createEquipmentModalIsOpen = true"
-          @open-create-tag-modal="$emit('open-create-tag-modal')"
-          @open-add-to-collection-modal="addToCollectionModalIsOpen = true"
-          @open-batch-share-modal="batchShareModalIsOpen = true"
-          @delete-selected-items="deleteSelectedItems"
-          @remove-selected-items-from-collection="removeSelectedItemsFromCollection"
-          @reset-table="handleResetTable"
-          @users-data-changed="$emit('users-data-changed')"
-          @bulk-invalidate-tokens="handleItemsUpdated"
-          @bulk-delete-groups="$emit('groups-data-changed')"
-        />
-      </template>
       <template #loading>
         <div class="card text-center">
           <div class="card-body">
@@ -159,6 +181,7 @@
 
 <script>
 import DynamicDataTableButtons from "@/components/DynamicDataTableButtons";
+import GroupedDataTable from "@/components/GroupedDataTable";
 import CreateItemModal from "@/components/CreateItemModal";
 import BatchCreateItemModal from "@/components/BatchCreateItemModal";
 import QRScannerModal from "@/components/QRScannerModal";
@@ -172,10 +195,12 @@ import { INVENTORY_TABLE_TYPES, EDITABLE_INVENTORY } from "@/resources.js";
 import { FilterMatchMode, FilterOperator, FilterService } from "@primevue/core/api";
 import DataTable from "primevue/datatable";
 import Column from "primevue/column";
+import { fetchAdvancedQueryConfig } from "@/server_fetch_utils.js";
 
 export default {
   components: {
     DynamicDataTableButtons,
+    GroupedDataTable,
     CreateItemModal,
     BatchCreateItemModal,
     QRScannerModal,
@@ -258,6 +283,14 @@ export default {
       // Names of the per-column matchers this instance registered with the global
       // FilterService, so that they can be removed again when it unmounts.
       registeredMatchModes: [],
+      // Advanced search / group-by state. This is the single source of truth for all
+      // of it: DynamicDataTableButtons and AdvancedSearchDropdown only receive it via
+      // props and emit changes back up, they never keep their own copy.
+      advancedQueryConfig: null,
+      advancedQueryResults: null,
+      advancedQueryConfigRequestId: 0,
+      activeQuickFilters: [],
+      groupByFields: [],
     };
   },
 
@@ -304,9 +337,29 @@ export default {
     availableColumns() {
       return this.columns.map((col) => ({ ...col }));
     },
+    // Rows after the server-side advanced query and client-side quick filters, before
+    // DataTable's own column filters / global search are applied on top of them.
+    displayedData() {
+      const base = this.advancedQueryResults !== null ? this.advancedQueryResults : this.data;
+      if (!base) return base;
+      if (!this.activeQuickFilters.length) return base;
+      return base.filter((item) =>
+        this.activeQuickFilters.every((filterId) => this.matchesQuickFilter(item, filterId)),
+      );
+    },
+  },
+  watch: {
+    dataType() {
+      this.advancedQueryConfig = null;
+      this.advancedQueryResults = null;
+      this.activeQuickFilters = [];
+      this.groupByFields = [];
+      this.loadAdvancedQueryConfig();
+    },
   },
   created() {
     this.$store.commit("setPage", { type: this.dataType, page: 0 });
+    this.loadAdvancedQueryConfig();
 
     const savedState = localStorage.getItem(`datatable-state-${this.dataType}`);
     if (savedState) {
@@ -370,6 +423,57 @@ export default {
     this.registeredMatchModes = [];
   },
   methods: {
+    async loadAdvancedQueryConfig() {
+      const requestId = ++this.advancedQueryConfigRequestId;
+      const dataType = this.dataType;
+      try {
+        const config = await fetchAdvancedQueryConfig(dataType);
+        if (requestId === this.advancedQueryConfigRequestId && dataType === this.dataType) {
+          this.advancedQueryConfig = config;
+        }
+      } catch (error) {
+        console.error("Failed to load advanced query configuration:", error);
+        if (requestId === this.advancedQueryConfigRequestId) {
+          this.advancedQueryConfig = null;
+        }
+      }
+    },
+    handleAdvancedQueryResults(items) {
+      this.advancedQueryResults = items;
+    },
+    onUpdateQuickFilters(next) {
+      this.activeQuickFilters = next;
+    },
+    onUpdateGroupByFields(next) {
+      this.groupByFields = next;
+    },
+    matchesQuickFilter(item, filterId) {
+      if (filterId === "my_items") {
+        const displayName = this.$store.getters.getCurrentUserDisplayName;
+        return (item.creators || []).some((c) => c.display_name === displayName);
+      }
+      if (filterId === "latest_week" || filterId === "latest_month") {
+        if (!item.date) return false;
+        const days = filterId === "latest_week" ? 7 : 30;
+        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        return new Date(item.date).getTime() >= cutoff;
+      }
+      if (filterId === "active") {
+        return ["active", "working", "available"].includes((item.status || "").toLowerCase());
+      }
+      if (filterId === "has_blocks") {
+        return (item.blocks || []).length > 0 || (item.nblocks || 0) > 0;
+      }
+      return true;
+    },
+    goToEditPageFromGroup(row) {
+      if (this.dataType === "users") {
+        return;
+      }
+      const row_id = row.item_id || row.collection_id;
+      if (!row_id) return;
+      this.$router.push(`/${this.editPageRoutePrefix}/${row_id}`);
+    },
     resolveBodyEvents(column) {
       const listeners = Object.fromEntries(
         (column.body?.events || []).map((event) => [
