@@ -1631,63 +1631,62 @@ export function invalidateToken(refcode) {
     });
 }
 
-export async function fetchQueryTypes(list_view) {
-  const url = new URL(`${API_URL}/query-types`);
-  url.searchParams.set("list_view", list_view);
-  const response = await fetch(url.toString(), { credentials: "include" });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error((data.error && data.error.message) || "Failed to fetch item types");
-  }
-  return data;
-}
-export const fetchItemTypes = fetchQueryTypes;
+// Advanced search: filters are written in the OPTIMADE filter language and passed as `?filter=`,
+// see https://www.optimade.org/specification/latest/#api-filtering-format-specification
 
-export async function fetchAdvancedQueryConfig(data_type) {
-  const url = new URL(`${API_URL}/query-capabilities`);
-  url.searchParams.set("data_type", data_type);
-  const response = await fetch(url.toString(), { credentials: "include" });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error((data.error && data.error.message) || "Failed to fetch query capabilities");
-  }
-  return data.advanced_query;
+// Uses `fetch_get` like the other GET requests, so that admins in super-user mode search
+// everything they can see (`sudo=1`).
+function queryGet(path, params = {}) {
+  const url = new URL(`${API_URL}/query/${path}`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.set(key, value);
+    }
+  });
+  // fetch_get rejects with the server's message as a string; callers expect an Error.
+  return fetch_get(url).catch((error) => {
+    throw error instanceof Error ? error : new Error(String(error));
+  });
 }
 
-export async function fetchQuerySchema(list_view, item_types) {
-  const url = new URL(`${API_URL}/query-schema`);
-  url.searchParams.set("list_view", list_view);
-  (item_types || []).forEach((t) => url.searchParams.append("item_type", t));
-  const response = await fetch(url.toString(), { credentials: "include" });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error((data.error && data.error.message) || "Failed to fetch query schema");
-  }
-  return data;
+// The types a table's advanced search can query, or null if it has none.
+export async function fetchAdvancedQueryConfig(dataType) {
+  const { types } = await queryGet("types", { data_type: dataType });
+  return types.length ? { isEnabled: true, types } : null;
 }
 
-export async function runQuery(request, queryRoute = `${API_URL}/query`) {
-  const response = await fetch(
-    queryRoute.startsWith("http") ? queryRoute : `${API_URL}${queryRoute}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(request),
-    },
-  );
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error((data.error && data.error.message) || "Query failed");
+// The filterable properties of a type; they do not change while the app runs.
+const querySchemas = new Map();
+export function fetchQuerySchema(typeId) {
+  if (!querySchemas.has(typeId)) {
+    querySchemas.set(
+      typeId,
+      queryGet(`${typeId}/schema`).catch((error) => {
+        querySchemas.delete(typeId);
+        throw error;
+      }),
+    );
   }
-  return data;
+  return querySchemas.get(typeId);
 }
-export const runItemQuery = runQuery;
 
-export async function fetchQueryOptions(optionsSource, query) {
-  const url = new URL(`${API_URL}/query-options/${optionsSource}`);
-  url.searchParams.set("q", query);
-  const response = await fetch(url.toString(), { credentials: "include" });
-  if (!response.ok) return { options: [] };
-  return response.json();
+// Search a type with an OPTIMADE `filter`, plus `sort`, `limit` and `offset`.
+export function runQuery(typeId, params = {}) {
+  return queryGet(typeId, params);
+}
+
+// Collect the matches of a search over all its pages, up to `maxResults`.
+// Resolves to `{ items, total }`, where `total` counts every match, even beyond `maxResults`.
+export async function runQueryAllPages(typeId, params = {}, maxResults = 2000) {
+  const items = [];
+  let page = { next_offset: 0 };
+  while (page.next_offset !== null && items.length < maxResults) {
+    page = await runQuery(typeId, {
+      ...params,
+      limit: Math.min(1000, maxResults - items.length),
+      offset: page.next_offset,
+    });
+    items.push(...page.items);
+  }
+  return { items, total: page.total };
 }

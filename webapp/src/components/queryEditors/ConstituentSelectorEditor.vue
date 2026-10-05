@@ -1,95 +1,40 @@
 <template>
-  <div class="position-relative">
-    <input
-      v-model="query"
-      type="text"
-      class="form-control form-control-sm"
-      placeholder="Search..."
-      autocomplete="off"
-      @input="onInput"
-      @blur="onBlur"
-    />
-    <ul v-if="options.length && showDropdown" class="constituent-dropdown list-unstyled mb-0">
-      <li
-        v-for="opt in options"
-        :key="opt.id"
-        class="constituent-option"
-        @mousedown.prevent="selectOption(opt)"
-      >
-        {{ opt.label }}
-      </li>
-    </ul>
-  </div>
+  <ItemSelect
+    v-model="selectedItem"
+    :types-to-query="CONSTITUENT_ITEM_TYPES"
+    placeholder="Search items..."
+  />
 </template>
 
 <script>
-import { fetchQueryOptions } from "@/server_fetch_utils.js";
-import { debounceTime } from "@/resources.js";
+import ItemSelect from "@/components/ItemSelect.vue";
+
+// Constituents are matched on `<constituent>.item.item_id`, so the value is an item ID.
+const CONSTITUENT_ITEM_TYPES = ["samples", "starting_materials", "cells", "equipment"];
 
 export default {
   name: "ConstituentSelectorEditor",
+  components: { ItemSelect },
   props: {
     modelValue: { type: String, default: "" },
-    optionsSource: { type: String, default: "datalab:item-reference" },
   },
   emits: ["update:modelValue"],
   data() {
-    return {
-      query: this.modelValue || "",
-      options: [],
-      showDropdown: false,
-      debounceTimer: null,
-    };
+    return { CONSTITUENT_ITEM_TYPES, pickedItem: null };
   },
-  methods: {
-    onInput() {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = setTimeout(async () => {
-        if (!this.query) {
-          this.options = [];
-          return;
-        }
-        try {
-          const result = await fetchQueryOptions(this.optionsSource, this.query);
-          this.options = result.options || [];
-          this.showDropdown = true;
-        } catch {
-          this.options = [];
-        }
-      }, debounceTime);
-    },
-    selectOption(opt) {
-      this.query = opt.label;
-      this.showDropdown = false;
-      this.$emit("update:modelValue", opt.value);
-    },
-    onBlur() {
-      setTimeout(() => {
-        this.showDropdown = false;
-      }, 150);
+  computed: {
+    // ItemSelect works with item objects, the rule with the item's ID.
+    selectedItem: {
+      get() {
+        if (!this.modelValue) return null;
+        if (this.pickedItem?.item_id === this.modelValue) return this.pickedItem;
+        return { item_id: this.modelValue, name: this.modelValue };
+      },
+      set(item) {
+        this.pickedItem = item;
+        this.$emit("update:modelValue", item?.item_id || undefined);
+      },
     },
   },
 };
 </script>
-
-<style scoped>
-.constituent-dropdown {
-  position: absolute;
-  z-index: 1000;
-  background: white;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  width: 100%;
-  max-height: 200px;
-  overflow-y: auto;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-.constituent-option {
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 0.875rem;
-}
-.constituent-option:hover {
-  background: #f0f4ff;
-}
-</style>

@@ -270,74 +270,58 @@
         </div>
 
         <div class="search-settings-group d-flex flex-nowrap">
-          <AdvancedQueryBuilder
-            v-if="advancedQueryConfig && advancedQueryConfig.isEnabled"
-            ref="advancedQueryBuilder"
-            hide-trigger
-            :list-view="advancedQueryConfig.listViewName"
-            :query-options="advancedQueryConfig.options"
-            @query-results="$emit('advanced-query-results', $event)"
-            @update:applied-summary="appliedQuerySummary = $event"
-          />
-
           <div
             v-if="advancedQueryConfig && advancedQueryConfig.isEnabled"
-            ref="advSearchRoot"
-            class="adv-search-group"
+            v-on-click-outside="() => (isAdvSearchDropdownVisible = false)"
+            class="dropdown search-field"
           >
-            <div class="adv-search-box">
-              <font-awesome-icon icon="search" class="adv-search-box__icon" />
-              <span v-if="appliedQuerySummary" class="adv-search-chip" :title="appliedQuerySummary">
-                <font-awesome-icon icon="filter" class="adv-search-chip__icon" />
-                <span class="adv-search-chip__label">{{ appliedQuerySummary }}</span>
-                <span class="adv-search-chip__remove" @click.stop="clearAppliedQuery">×</span>
-              </span>
-              <span
-                v-if="activeQuickFilters.length"
-                class="adv-search-chip"
-                :title="activeQuickFilterLabels"
-              >
-                <font-awesome-icon icon="filter" class="adv-search-chip__icon" />
-                <span class="adv-search-chip__label">{{ activeQuickFilterLabels }}</span>
-                <span class="adv-search-chip__remove" @click.stop="onUpdateQuickFilters([])"
-                  >×</span
-                >
-              </span>
-              <span
-                v-if="groupByFields.length"
-                class="adv-search-chip"
-                :title="groupByFields.map((g) => g.label).join(' → ')"
-              >
-                <font-awesome-icon icon="folder" class="adv-search-chip__icon" />
-                <span class="adv-search-chip__label">{{
-                  groupByFields.map((g) => g.label).join(" → ")
-                }}</span>
-                <span class="adv-search-chip__remove" @click.stop="onUpdateGroupByFields([])"
-                  >×</span
-                >
-              </span>
+            <div class="input-group">
+              <div class="input-group-prepend">
+                <span class="input-group-text"><font-awesome-icon icon="search" /></span>
+                <span v-if="activeSearchChips.length" class="input-group-text py-0">
+                  <!-- Only the label is truncated, so the remove button stays visible. -->
+                  <span
+                    v-for="chip in activeSearchChips"
+                    :key="chip.key"
+                    class="badge badge-primary d-inline-flex align-items-center mr-1"
+                    style="max-width: 12rem"
+                    :title="chip.label"
+                  >
+                    <span class="text-truncate" style="min-width: 0">{{ chip.label }}</span>
+                    <button
+                      type="button"
+                      class="btn btn-link p-0 ml-1 text-white flex-shrink-0"
+                      aria-label="Remove"
+                      title="Remove"
+                      @click.stop="chip.clear"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                </span>
+              </div>
               <input
                 v-model="localFilters.global.value"
                 data-testid="search-input"
-                class="adv-search-box__input"
+                class="form-control"
                 placeholder="Search"
               />
-              <button
-                data-testid="advanced-search-chevron"
-                type="button"
-                class="adv-search-box__chevron"
-                aria-label="Search options"
-                title="Search options"
-                @click="isAdvSearchDropdownVisible = !isAdvSearchDropdownVisible"
-              >
-                <font-awesome-icon icon="chevron-down" />
-              </button>
+              <div class="input-group-append">
+                <button
+                  data-testid="advanced-search-chevron"
+                  type="button"
+                  class="btn btn-outline-secondary dropdown-toggle"
+                  aria-label="Search options"
+                  title="Search options"
+                  aria-haspopup="true"
+                  :aria-expanded="isAdvSearchDropdownVisible"
+                  @click="isAdvSearchDropdownVisible = !isAdvSearchDropdownVisible"
+                ></button>
+              </div>
             </div>
 
             <AdvancedSearchDropdown
               v-if="isAdvSearchDropdownVisible"
-              class="adv-search-dropdown"
-              :data-type="dataType"
               :active-filters="activeQuickFilters"
               :group-by-fields="groupByFields"
               :available-columns="availableColumns"
@@ -412,6 +396,13 @@
       </div>
     </div>
 
+    <AdvancedQueryBuilder
+      v-if="advancedQueryConfig && advancedQueryConfig.isEnabled"
+      ref="advancedQueryBuilder"
+      :types="advancedQueryConfig.types"
+      @query-results="$emit('advanced-query-results', $event)"
+      @update:applied-summary="appliedQuerySummary = $event"
+    />
     <BulkChangeRoleModal
       v-model="showBulkChangeRoleModal"
       :selected-users="itemsSelected"
@@ -592,10 +583,32 @@ export default {
     isLoggedIn() {
       return this.$store.state.currentUserID !== null;
     },
-    activeQuickFilterLabels() {
-      return this.activeQuickFilters
-        .map((id) => QUICK_FILTERS.find((f) => f.id === id)?.label || id)
-        .join(", ");
+    activeSearchChips() {
+      const chips = [];
+      if (this.appliedQuerySummary) {
+        chips.push({
+          key: "query",
+          label: this.appliedQuerySummary,
+          clear: this.clearAppliedQuery,
+        });
+      }
+      if (this.activeQuickFilters.length) {
+        chips.push({
+          key: "quick-filters",
+          label: this.activeQuickFilters
+            .map((id) => QUICK_FILTERS.find((f) => f.id === id)?.label || id)
+            .join(", "),
+          clear: () => this.onUpdateQuickFilters([]),
+        });
+      }
+      if (this.groupByFields.length) {
+        chips.push({
+          key: "group-by",
+          label: `Group: ${this.groupByFields.map((g) => g.label).join(" → ")}`,
+          clear: () => this.onUpdateGroupByFields([]),
+        });
+      }
+      return chips;
     },
   },
   watch: {
@@ -614,12 +627,6 @@ export default {
       this.appliedQuerySummary = null;
     },
   },
-  mounted() {
-    document.addEventListener("click", this.handleClickOutsideAdvSearch);
-  },
-  beforeUnmount() {
-    document.removeEventListener("click", this.handleClickOutsideAdvSearch);
-  },
   methods: {
     itemLabel(count) {
       const labels = {
@@ -635,11 +642,6 @@ export default {
       };
       const [singular, plural] = labels[this.dataType] || ["item", "items"];
       return count === 1 ? singular : plural;
-    },
-    handleClickOutsideAdvSearch(event) {
-      if (this.$refs.advSearchRoot && !this.$refs.advSearchRoot.contains(event.target)) {
-        this.isAdvSearchDropdownVisible = false;
-      }
     },
     openAdvancedQuery() {
       this.isAdvSearchDropdownVisible = false;
@@ -1269,104 +1271,5 @@ export default {
 
 .column-select-dropdown {
   width: 100%;
-}
-
-.adv-search-group {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 640px;
-}
-
-.adv-search-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: calc(1.5em + 0.75rem + 2px);
-  padding: 0 0.6rem;
-  background: #fff;
-  border: 1px solid #ced4da;
-  border-radius: 0.25rem;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-.adv-search-box:focus-within {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.15);
-}
-
-.adv-search-box__icon {
-  flex-shrink: 0;
-  color: #6c757d;
-  font-size: 0.85rem;
-}
-
-.adv-search-box__input {
-  flex: 1 1 auto;
-  min-width: 40px;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 1rem;
-  padding: 0;
-}
-
-.adv-search-box__chevron {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  background: none;
-  border: none;
-  color: #6c757d;
-  font-size: 0.75rem;
-  padding: 2px;
-  cursor: pointer;
-}
-.adv-search-box__chevron:hover {
-  color: #495057;
-}
-
-.adv-search-chip {
-  flex-shrink: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: #f5f3ff;
-  color: #6366f1;
-  border-radius: 10px;
-  padding: 1px 6px;
-  font-size: 0.72rem;
-  max-width: 180px;
-  min-width: 0;
-}
-
-.adv-search-chip__icon {
-  flex-shrink: 0;
-  font-size: 0.68rem;
-  opacity: 0.8;
-}
-
-.adv-search-chip__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.adv-search-chip__remove {
-  flex-shrink: 0;
-  cursor: pointer;
-  opacity: 0.7;
-}
-.adv-search-chip__remove:hover {
-  opacity: 1;
-}
-
-.adv-search-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 1100;
 }
 </style>

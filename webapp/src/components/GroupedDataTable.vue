@@ -1,60 +1,63 @@
 <template>
-  <div class="grouped-table">
-    <div v-if="showHeader" class="grouped-header-row">
-      <span class="grouped-header-row__checkbox"></span>
-      <span v-for="col in effectiveColumns" :key="col.field" class="grouped-header-row__cell">{{
-        col.header
-      }}</span>
-    </div>
+  <div>
+    <table v-if="!groupFields.length" class="table table-sm table-hover mb-2">
+      <thead>
+        <tr>
+          <th scope="col"></th>
+          <th v-for="col in effectiveColumns" :key="col.field" scope="col">{{ col.header }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="row in items" :key="rowKey(row)" role="button" @click="onRowClick(row)">
+          <td>
+            <input
+              type="checkbox"
+              :checked="isSelected(row)"
+              aria-label="Select row"
+              @click.stop="toggleSelected(row)"
+            />
+          </td>
+          <td v-for="col in effectiveColumns" :key="col.field">{{ cellValue(row, col) }}</td>
+        </tr>
+        <tr v-if="!items.length">
+          <td :colspan="effectiveColumns.length + 1" class="text-muted">No items</td>
+        </tr>
+      </tbody>
+    </table>
 
-    <template v-if="!groupFields.length">
-      <div
-        v-for="row in items"
-        :key="rowKey(row)"
-        class="grouped-leaf-row"
-        @click="onRowClick(row)"
-      >
-        <input
-          type="checkbox"
-          class="grouped-leaf-row__checkbox"
-          :checked="isSelected(row)"
-          @click.stop="toggleSelected(row)"
-        />
-        <span v-for="col in effectiveColumns" :key="col.field" class="grouped-leaf-row__cell">{{
-          cellValue(row, col)
-        }}</span>
-      </div>
-      <div v-if="!items.length" class="grouped-empty text-muted">No items</div>
-    </template>
-
-    <template v-else>
-      <div v-for="bucket in buckets" :key="bucket.key" class="grouped-bucket">
-        <button type="button" class="grouped-bucket__header" @click="toggle(bucket.key)">
+    <div v-else class="list-group mb-2">
+      <template v-for="bucket in buckets" :key="bucket.key">
+        <button
+          type="button"
+          class="list-group-item list-group-item-action font-weight-bold"
+          :aria-expanded="isExpanded(bucket.key)"
+          @click="toggle(bucket.key)"
+        >
           <font-awesome-icon
-            icon="chevron-right"
-            class="grouped-bucket__chevron"
-            :class="{ 'grouped-bucket__chevron--open': isExpanded(bucket.key) }"
+            :icon="isExpanded(bucket.key) ? 'chevron-down' : 'chevron-right'"
+            class="mr-2"
           />
-          <span class="grouped-bucket__label">{{ bucket.label }}</span>
-          <span class="grouped-bucket__count">({{ bucket.items.length }})</span>
+          {{ bucket.label }}
+          <span class="badge badge-secondary badge-pill ml-1">{{ bucket.items.length }}</span>
         </button>
-        <GroupedDataTable
-          v-if="isExpanded(bucket.key)"
-          class="grouped-bucket__children"
-          :items="bucket.items"
-          :group-fields="groupFields.slice(1)"
-          :items-selected="itemsSelected"
-          :columns="columns"
-          :show-header="false"
-          @update:items-selected="$emit('update:items-selected', $event)"
-          @row-click="$emit('row-click', $event)"
-        />
-      </div>
-    </template>
+        <div v-if="isExpanded(bucket.key)" class="list-group-item pl-4">
+          <GroupedDataTable
+            :items="bucket.items"
+            :group-fields="groupFields.slice(1)"
+            :items-selected="itemsSelected"
+            :columns="columns"
+            @update:items-selected="$emit('update:items-selected', $event)"
+            @row-click="$emit('row-click', $event)"
+          />
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 
 <script>
+import { rowKey } from "@/utils/tableColumns.js";
+
 const FALLBACK_COLUMNS = [
   { field: "item_id", header: "ID" },
   { field: "name", header: "Name" },
@@ -69,7 +72,6 @@ export default {
     groupFields: { type: Array, required: true },
     itemsSelected: { type: Array, required: true },
     columns: { type: Array, default: () => [] },
-    showHeader: { type: Boolean, default: true },
   },
   emits: ["update:items-selected", "row-click"],
   data() {
@@ -93,13 +95,19 @@ export default {
           map.get(key).items.push(item);
         }
       }
-      return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+      const buckets = [...map.values()];
+      const isEmpty = (b) => b.key === "__none__";
+      return buckets.sort((a, b) => {
+        // The group without a value goes last.
+        if (isEmpty(a) !== isEmpty(b)) return isEmpty(a) ? 1 : -1;
+        // Date keys sort chronologically as strings (YYYY, YYYY-MM, YYYY-MM-DD); newest first.
+        if (field.id === "date") return b.key.localeCompare(a.key);
+        return a.label.localeCompare(b.label);
+      });
     },
   },
   methods: {
-    rowKey(row) {
-      return row.item_id || row.collection_id || row.immutable_id || row._id;
-    },
+    rowKey,
     isSelected(row) {
       return this.itemsSelected.some((r) => this.rowKey(r) === this.rowKey(row));
     },
@@ -134,7 +142,7 @@ export default {
       if (Array.isArray(value)) {
         if (value.length && typeof value[0] === "object") {
           return value
-            .map((v) => v.display_name || v.collection_id || v.title)
+            .map((v) => v.display_name || v.collection_id || v.title || v.name)
             .filter(Boolean)
             .join(", ");
         }
@@ -164,6 +172,12 @@ export default {
       if (field.id === "date") {
         return [this.getDateBucket(item.date, field.grain || "month")];
       }
+      if (field.id === "tags") {
+        // Like creators, an item with several tags appears under each of them.
+        const tags = (item.tags || []).filter((t) => t && (t.immutable_id || t.name));
+        if (!tags.length) return [{ key: "__none__", label: "No tags" }];
+        return tags.map((t) => ({ key: t.immutable_id || t.name, label: t.name || "Unnamed tag" }));
+      }
       const value = item[field.id];
       if (value === undefined || value === null || value === "") {
         return [{ key: "__none__", label: "No value" }];
@@ -171,116 +185,34 @@ export default {
       return [{ key: String(value), label: String(value) }];
     },
     getDateBucket(value, grain) {
-      const d = value ? new Date(value) : null;
-      if (!d || Number.isNaN(d.getTime())) {
+      // Use the calendar date as stored (and as the Date column shows it: the first 10
+      // characters), not the browser's local date, so that grouping matches the table.
+      const match = typeof value === "string" ? value.match(/^(\d{4})-(\d{2})-(\d{2})/) : null;
+      if (!match) {
         return { key: "__none__", label: "No date" };
       }
-      const y = d.getFullYear();
-      const m = d.getMonth();
+      const [y, m, d] = match.slice(1).map(Number);
+      const day = new Date(Date.UTC(y, m - 1, d));
+      const pad = (n) => String(n).padStart(2, "0");
+      const isoDay = (date) =>
+        `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+      const format = (date, options) =>
+        date.toLocaleDateString(undefined, { ...options, timeZone: "UTC" });
       if (grain === "day") {
-        const key = d.toISOString().slice(0, 10);
-        return { key, label: d.toLocaleDateString() };
+        return { key: isoDay(day), label: format(day) };
       }
       if (grain === "week") {
-        const firstDay = new Date(d);
-        firstDay.setDate(d.getDate() - d.getDay());
-        const key = firstDay.toISOString().slice(0, 10);
-        return { key: `week-${key}`, label: `Week of ${firstDay.toLocaleDateString()}` };
+        const firstDay = new Date(Date.UTC(y, m - 1, d - day.getUTCDay()));
+        return { key: isoDay(firstDay), label: `Week of ${format(firstDay)}` };
       }
       if (grain === "year") {
         return { key: `${y}`, label: `${y}` };
       }
-      const key = `${y}-${String(m + 1).padStart(2, "0")}`;
-      const label = d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-      return { key, label };
+      return {
+        key: `${y}-${pad(m)}`,
+        label: format(day, { month: "long", year: "numeric" }),
+      };
     },
   },
 };
 </script>
-
-<style scoped>
-.grouped-table {
-  width: 100%;
-}
-.grouped-header-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 8px 12px;
-  border-bottom: 2px solid #e9ecef;
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #9ca3af;
-}
-.grouped-header-row__checkbox {
-  width: 14px;
-  flex-shrink: 0;
-}
-.grouped-header-row__cell {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.grouped-bucket__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  background: #f9fafb;
-  border: 1px solid #e9ecef;
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin: 4px 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #374151;
-  cursor: pointer;
-}
-.grouped-bucket__header:hover {
-  background: #f3f4f6;
-}
-.grouped-bucket__chevron {
-  font-size: 0.7rem;
-  color: #6366f1;
-  transition: transform 0.12s;
-}
-.grouped-bucket__chevron--open {
-  transform: rotate(90deg);
-}
-.grouped-bucket__count {
-  color: #9ca3af;
-  font-weight: 400;
-}
-.grouped-bucket__children {
-  padding-left: 22px;
-}
-.grouped-leaf-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 7px 12px;
-  border-bottom: 1px solid #f3f4f6;
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: #374151;
-}
-.grouped-leaf-row:hover {
-  background: #f9fafb;
-}
-.grouped-leaf-row__cell {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.grouped-empty {
-  padding: 10px 12px;
-  font-size: 0.85rem;
-}
-</style>

@@ -1,52 +1,74 @@
 <template>
-  <div class="qg" :class="{ 'qg--nested': currentDepth > 0 }">
-    <div v-if="node.children.length > 1" class="qg__combinator">
+  <div :class="{ 'border-left pl-3 mt-2': currentDepth > 0 }">
+    <div v-if="node.children.length" class="mb-2">
       <button
-        class="qg__comb-btn"
-        :class="{ 'qg__comb-btn--active': node.combinator === 'and' }"
-        @click="setCombinator('and')"
+        type="button"
+        class="btn btn-sm mr-2"
+        :class="node.negate ? 'btn-danger' : 'btn-outline-danger'"
+        :aria-pressed="!!node.negate"
+        title="Negate this group (OPTIMADE NOT)"
+        @click="$emit('update:node', { ...node, negate: !node.negate })"
       >
-        AND
+        NOT
       </button>
-      <button
-        class="qg__comb-btn"
-        :class="{ 'qg__comb-btn--active': node.combinator === 'or' }"
-        @click="setCombinator('or')"
-      >
-        OR
-      </button>
-    </div>
-
-    <div class="qg__rules">
-      <div v-for="(child, index) in node.children" :key="child._uid" class="qg__rule-wrap">
-        <QueryRule
-          v-if="child.kind === 'rule'"
-          :node="child"
-          :fields="fields"
-          @update:node="updateChild(index, $event)"
-          @remove="removeChild(index)"
-        />
-        <QueryGroup
-          v-else
-          :node="child"
-          :fields="fields"
-          :max-depth="maxDepth"
-          :current-depth="currentDepth + 1"
-          @update:node="updateChild(index, $event)"
-          @remove="removeChild(index)"
-        />
+      <div v-if="node.children.length > 1" class="btn-group btn-group-sm" role="group">
+        <button
+          type="button"
+          class="btn"
+          :class="node.combinator === 'and' ? 'btn-primary' : 'btn-outline-primary'"
+          @click="setCombinator('and')"
+        >
+          AND
+        </button>
+        <button
+          type="button"
+          class="btn"
+          :class="node.combinator === 'or' ? 'btn-primary' : 'btn-outline-primary'"
+          @click="setCombinator('or')"
+        >
+          OR
+        </button>
       </div>
     </div>
 
-    <div class="qg__actions">
-      <button class="qg__add-rule" @click="addRule">
-        <font-awesome-icon icon="plus" class="me-1" />New Rule
+    <div v-for="(child, index) in node.children" :key="child._uid" class="mb-2">
+      <QueryRule
+        v-if="child.kind === 'rule'"
+        :node="child"
+        :fields="fields"
+        @update:node="updateChild(index, $event)"
+        @remove="removeChild(index)"
+      />
+      <QueryGroup
+        v-else
+        :node="child"
+        :fields="fields"
+        :max-depth="maxDepth"
+        :current-depth="currentDepth + 1"
+        @update:node="updateChild(index, $event)"
+        @remove="removeChild(index)"
+      />
+    </div>
+
+    <div class="d-flex align-items-center">
+      <button type="button" class="btn btn-sm btn-outline-primary mr-2" @click="addRule">
+        <font-awesome-icon icon="plus" class="mr-1" />New rule
       </button>
-      <button v-if="currentDepth < maxDepth - 1" class="qg__add-group" @click="addGroup">
+      <button
+        v-if="currentDepth < maxDepth - 1"
+        type="button"
+        class="btn btn-sm btn-outline-secondary"
+        @click="addGroup"
+      >
         Add group
       </button>
-      <button v-if="currentDepth > 0" class="qg__remove-group ms-auto" @click="$emit('remove')">
-        <font-awesome-icon icon="times" /> Remove group
+      <button
+        v-if="currentDepth > 0"
+        type="button"
+        class="btn btn-sm btn-link text-danger ml-auto"
+        @click="$emit('remove')"
+      >
+        <font-awesome-icon icon="times" class="mr-1" />Remove group
       </button>
     </div>
   </div>
@@ -105,109 +127,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-.qg {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.qg--nested {
-  border-left: 3px solid #e5e7eb;
-  padding-left: 14px;
-  margin-top: 8px;
-  padding-top: 8px;
-}
-
-.qg__combinator {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  margin-bottom: 8px;
-  align-self: flex-start;
-}
-.qg__comb-btn {
-  padding: 3px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  color: #9ca3af;
-  cursor: pointer;
-  transition: all 0.1s;
-  letter-spacing: 0.03em;
-}
-.qg__comb-btn:first-child {
-  border-radius: 6px 0 0 6px;
-}
-.qg__comb-btn:last-child {
-  border-radius: 0 6px 6px 0;
-  border-left: none;
-}
-.qg__comb-btn--active {
-  background: #6366f1;
-  border-color: #6366f1;
-  color: #fff;
-}
-
-.qg__rules {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.qg__rule-wrap {
-  display: flex;
-  flex-direction: column;
-}
-
-.qg__actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-  padding-top: 2px;
-}
-.qg__add-rule {
-  background: none;
-  border: none;
-  color: #6366f1;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0;
-  display: flex;
-  align-items: center;
-}
-.qg__add-rule:hover {
-  color: #4f46e5;
-}
-.qg__add-group {
-  background: none;
-  border: 1px dashed #d1d5db;
-  border-radius: 6px;
-  color: #9ca3af;
-  font-size: 0.78rem;
-  cursor: pointer;
-  padding: 2px 10px;
-  transition:
-    border-color 0.12s,
-    color 0.12s;
-}
-.qg__add-group:hover {
-  border-color: #6366f1;
-  color: #6366f1;
-}
-.qg__remove-group {
-  background: none;
-  border: none;
-  color: #f87171;
-  font-size: 0.78rem;
-  cursor: pointer;
-  padding: 0;
-  margin-left: auto;
-}
-.ms-auto {
-  margin-left: auto;
-}
-</style>

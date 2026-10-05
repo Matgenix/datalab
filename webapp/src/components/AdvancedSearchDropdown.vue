@@ -1,88 +1,83 @@
 <template>
-  <div class="asd-panel" @click.stop>
-    <div class="asd-col">
-      <span class="asd-col__title">Filters</span>
-      <button
-        v-for="f in quickFilters"
-        :key="f.id"
-        type="button"
-        class="asd-row"
-        @click="toggleFilter(f.id)"
-      >
-        <font-awesome-icon
-          icon="check"
-          class="asd-row__check"
-          :class="{ 'asd-row__check--hidden': !activeFilters.includes(f.id) }"
-        />
-        <span>{{ f.label }}</span>
-      </button>
-      <div class="asd-divider"></div>
-      <button type="button" class="asd-row asd-row--link" @click="$emit('open-advanced-query')">
-        Custom Filter...
-      </button>
-    </div>
-
-    <div class="asd-col">
-      <span class="asd-col__title">Group By</span>
-      <button
-        v-for="g in resolvedStaticGroupFields"
-        :key="g.id"
-        type="button"
-        class="asd-row"
-        :class="{ 'asd-row--disabled': g.disabled }"
-        :disabled="g.disabled"
-        :title="g.disabled ? 'Not applicable to this table' : ''"
-        @click="toggleGroup(g)"
-      >
-        <font-awesome-icon
-          icon="check"
-          class="asd-row__check"
-          :class="{ 'asd-row__check--hidden': !isGroupActive(g.id) }"
-        />
-        <span>{{ g.label }}</span>
-      </button>
-
-      <div v-if="isGroupActive('date')" class="asd-grain-row">
+  <div class="dropdown-menu dropdown-menu-right show" @click.stop>
+    <div class="d-flex">
+      <div class="flex-fill border-right">
+        <h6 class="dropdown-header">Filters</h6>
         <button
-          v-for="grain in dateGrains"
-          :key="grain"
+          v-for="f in resolvedQuickFilters"
+          :key="f.id"
           type="button"
-          class="asd-grain"
-          :class="{ 'asd-grain--active': dateGrain === grain }"
-          @click="setDateGrain(grain)"
+          class="dropdown-item"
+          :class="{ active: activeFilters.includes(f.id), disabled: f.disabled }"
+          :disabled="f.disabled"
+          :title="f.disabled ? 'Not applicable to this table' : ''"
+          @click="toggleFilter(f.id)"
         >
-          {{ grain }}
+          {{ f.label }}
+        </button>
+        <div class="dropdown-divider"></div>
+        <button type="button" class="dropdown-item" @click="$emit('open-advanced-query')">
+          <font-awesome-icon icon="filter" class="mr-2" />Custom filter…
         </button>
       </div>
 
-      <div class="asd-divider"></div>
-      <button
-        type="button"
-        class="asd-row asd-row--link"
-        @click="isCustomGroupOpen = !isCustomGroupOpen"
-      >
-        Custom Group
-        <font-awesome-icon icon="chevron-down" class="asd-row__chevron" />
-      </button>
-      <div v-if="isCustomGroupOpen" class="asd-custom-group">
-        <div v-if="customGroupFieldsLoading" class="asd-state text-muted">Loading…</div>
-        <div v-else-if="!customGroupFields.length" class="asd-state text-muted">
-          No other groupable fields
-        </div>
+      <div class="flex-fill">
+        <h6 class="dropdown-header">Group by</h6>
         <button
-          v-for="f in customGroupFields"
-          :key="f.id"
+          v-for="g in resolvedStaticGroupFields"
+          :key="g.id"
           type="button"
-          class="asd-row"
-          @click="toggleGroup(f)"
+          class="dropdown-item"
+          :class="{ active: isGroupActive(g.id), disabled: g.disabled }"
+          :disabled="g.disabled"
+          :title="g.disabled ? 'Not applicable to this table' : ''"
+          @click="toggleGroup(g)"
         >
-          <font-awesome-icon
-            icon="check"
-            class="asd-row__check"
-            :class="{ 'asd-row__check--hidden': !isGroupActive(f.id) }"
-          />
-          <span>{{ f.label }}</span>
+          {{ g.label }}
         </button>
+
+        <div v-if="isGroupActive('date')" class="px-4 py-1">
+          <div class="btn-group btn-group-sm" role="group" aria-label="Date grouping">
+            <button
+              v-for="grain in dateGrains"
+              :key="grain"
+              type="button"
+              class="btn text-capitalize"
+              :class="dateGrain === grain ? 'btn-primary' : 'btn-outline-primary'"
+              @click="setDateGrain(grain)"
+            >
+              {{ grain }}
+            </button>
+          </div>
+        </div>
+
+        <div class="dropdown-divider"></div>
+        <button
+          type="button"
+          class="dropdown-item dropdown-toggle"
+          :aria-expanded="isCustomGroupOpen"
+          @click="isCustomGroupOpen = !isCustomGroupOpen"
+        >
+          Custom group
+        </button>
+        <template v-if="isCustomGroupOpen">
+          <span v-if="customGroupFieldsLoading" class="dropdown-item-text text-muted">
+            Loading…
+          </span>
+          <span v-else-if="!customGroupFields.length" class="dropdown-item-text text-muted">
+            No other groupable fields
+          </span>
+          <button
+            v-for="f in customGroupFields"
+            :key="f.id"
+            type="button"
+            class="dropdown-item"
+            :class="{ active: isGroupActive(f.id) }"
+            @click="toggleGroup(f)"
+          >
+            {{ f.label }}
+          </button>
+        </template>
       </div>
     </div>
   </div>
@@ -99,7 +94,6 @@ export default {
     groupByFields: { type: Array, required: true },
     availableColumns: { type: Array, default: () => [] },
     advancedQueryConfig: { type: Object, default: null },
-    dataType: { type: String, default: "" },
   },
   emits: ["update:active-filters", "update:group-by-fields", "open-advanced-query"],
   data() {
@@ -115,10 +109,14 @@ export default {
     };
   },
   computed: {
+    columnFields() {
+      return new Set(this.availableColumns.map((c) => c.field));
+    },
+    resolvedQuickFilters() {
+      return this.quickFilters.map((f) => ({ ...f, disabled: !this.isApplicable(f) }));
+    },
     resolvedStaticGroupFields() {
-      return this.staticGroupFields.map((f) =>
-        f.id === "type" ? { ...f, disabled: this.dataType !== "samples" } : f,
-      );
+      return this.staticGroupFields.map((f) => ({ ...f, disabled: !this.isApplicable(f) }));
     },
     dateGrain() {
       const entry = this.groupByFields.find((g) => g.id === "date");
@@ -141,17 +139,16 @@ export default {
       }
       this.customGroupFieldsLoading = true;
       try {
-        const itemTypes = (
-          this.advancedQueryConfig.options?.item_types ||
-          this.advancedQueryConfig.options?.query_types ||
-          []
-        )
-          .filter((t) => t.queryable)
-          .map((t) => t.id);
-        const schema = await fetchQuerySchema(this.advancedQueryConfig.listViewName, itemTypes);
+        // Groupable properties shared by every type this table can search.
+        const fieldLists = await Promise.all(
+          this.advancedQueryConfig.types.map(async (t) => (await fetchQuerySchema(t.id)).fields),
+        );
+        const fields = fieldLists[0].filter((f) =>
+          fieldLists.every((list) => list.some((other) => other.id === f.id)),
+        );
         const loadedFieldIds = new Set(this.availableColumns.map((c) => c.field));
         const staticFieldIds = new Set(["tags", "type", "creators", "status", "date"]);
-        this.customGroupFields = (schema.fields || [])
+        this.customGroupFields = fields
           .filter((f) => f.groupable && loadedFieldIds.has(f.id) && !staticFieldIds.has(f.id))
           .map((f) => ({ id: f.id, label: f.label }));
       } catch (error) {
@@ -160,6 +157,10 @@ export default {
       } finally {
         this.customGroupFieldsLoading = false;
       }
+    },
+    // Whether this table shows one of the columns a quick filter or group-by field reads.
+    isApplicable(option) {
+      return !option.columns || option.columns.some((c) => this.columnFields.has(c));
     },
     toggleFilter(id) {
       const next = this.activeFilters.includes(id)
@@ -185,106 +186,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-.asd-panel {
-  display: flex;
-  gap: 0;
-  background: #fff;
-  border: 1px solid #dee2e6;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  padding: 10px 0;
-  min-width: 560px;
-}
-.asd-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 0 6px;
-  border-right: 1px solid #f0f0f0;
-}
-.asd-col:last-child {
-  border-right: none;
-}
-.asd-col__title {
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #9ca3af;
-  padding: 4px 10px 6px;
-}
-.asd-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 6px 10px;
-  font-size: 0.85rem;
-  color: #374151;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.asd-row:hover:not(:disabled) {
-  background: #f5f3ff;
-}
-.asd-row--disabled {
-  color: #adb5bd;
-  cursor: not-allowed;
-}
-.asd-row--link {
-  color: #6366f1;
-  justify-content: space-between;
-}
-.asd-row__check {
-  font-size: 0.7rem;
-  color: #6366f1;
-  width: 12px;
-  flex-shrink: 0;
-}
-.asd-row__check--hidden {
-  visibility: hidden;
-}
-.asd-row__chevron {
-  font-size: 0.6rem;
-  opacity: 0.6;
-}
-.asd-divider {
-  height: 1px;
-  background: #f0f0f0;
-  margin: 6px 4px;
-}
-.asd-state {
-  padding: 4px 10px;
-  font-size: 0.8rem;
-}
-.asd-grain-row {
-  display: flex;
-  gap: 4px;
-  padding: 2px 10px 6px;
-}
-.asd-grain {
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  border-radius: 12px;
-  font-size: 0.72rem;
-  padding: 2px 10px;
-  cursor: pointer;
-  color: #6b7280;
-  text-transform: capitalize;
-}
-.asd-grain--active {
-  background: #6366f1;
-  border-color: #6366f1;
-  color: #fff;
-}
-.asd-custom-group {
-  padding-left: 4px;
-  max-height: 160px;
-  overflow-y: auto;
-}
-</style>

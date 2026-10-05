@@ -1,9 +1,13 @@
 <template>
-  <div class="qr">
-    <div class="qr__field">
-      <span class="qr__field-icon">{{ fieldIcon }}</span>
+  <div class="form-row align-items-center">
+    <div class="col">
       <!-- TODO: Render structured subfields hierarchically; flat dot-path fields work for now. -->
-      <select :value="node.field" class="qr__select" @change="onFieldChange($event.target.value)">
+      <select
+        :value="node.field"
+        class="custom-select custom-select-sm"
+        aria-label="Field"
+        @change="onFieldChange($event.target.value)"
+      >
         <option value="" disabled>Field…</option>
         <optgroup v-for="group in groupedFields" :key="group.label" :label="group.label">
           <option v-for="f in group.fields" :key="f.id" :value="f.id">{{ f.label }}</option>
@@ -11,10 +15,11 @@
       </select>
     </div>
 
-    <div class="qr__operator">
+    <div class="col">
       <select
         :value="node.operator"
-        class="qr__select"
+        class="custom-select custom-select-sm"
+        aria-label="Operator"
         :disabled="!node.field"
         @change="onOperatorChange($event.target.value)"
       >
@@ -23,23 +28,28 @@
       </select>
     </div>
 
-    <div class="qr__value">
+    <div class="col">
       <component
         :is="editorComponent"
         v-if="currentOperator && currentOperator.value_required"
         :model-value="node.value"
         :value-schema="currentOperator.value_schema"
-        :options-source="currentOperator.options_source"
         @update:model-value="onValueChange"
       />
-      <span v-else-if="currentOperator && !currentOperator.value_required" class="qr__no-value">
-        no value needed
-      </span>
+      <small v-else-if="currentOperator" class="text-muted font-italic">no value needed</small>
     </div>
 
-    <button class="qr__delete" title="Remove" @click="$emit('remove')">
-      <font-awesome-icon icon="trash" />
-    </button>
+    <div class="col-auto">
+      <button
+        type="button"
+        class="btn btn-sm btn-link text-danger"
+        title="Remove"
+        aria-label="Remove"
+        @click="$emit('remove')"
+      >
+        <font-awesome-icon icon="trash" />
+      </button>
+    </div>
   </div>
 </template>
 
@@ -48,7 +58,6 @@ import TextEditor from "@/components/queryEditors/TextEditor.vue";
 import StringListEditor from "@/components/queryEditors/StringListEditor.vue";
 import NumberEditor from "@/components/queryEditors/NumberEditor.vue";
 import DatetimeEditor from "@/components/queryEditors/DatetimeEditor.vue";
-import DatetimeRangeEditor from "@/components/queryEditors/DatetimeRangeEditor.vue";
 import EnumEditor from "@/components/queryEditors/EnumEditor.vue";
 import ChemicalFormulaEditor from "@/components/queryEditors/ChemicalFormulaEditor.vue";
 import ConstituentSelectorEditor from "@/components/queryEditors/ConstituentSelectorEditor.vue";
@@ -59,19 +68,9 @@ const editorMap = {
   "string-list": "StringListEditor",
   number: "NumberEditor",
   datetime: "DatetimeEditor",
-  "datetime-range": "DatetimeRangeEditor",
   enum: "EnumEditor",
   "chemical-formula": "ChemicalFormulaEditor",
   "constituent-selector": "ConstituentSelectorEditor",
-};
-
-const groupIcons = {
-  Basic: "Aa",
-  Chemistry: "⚗",
-  Cell: "⊙",
-  Synthesis: "∑",
-  Provenance: "◈",
-  Other: "◇",
 };
 
 export default {
@@ -81,7 +80,6 @@ export default {
     StringListEditor,
     NumberEditor,
     DatetimeEditor,
-    DatetimeRangeEditor,
     EnumEditor,
     ChemicalFormulaEditor,
     ConstituentSelectorEditor,
@@ -116,10 +114,6 @@ export default {
       if (!this.currentOperator) return null;
       return editorMap[this.currentOperator.editor] || "FallbackEditor";
     },
-    fieldIcon() {
-      if (!this.currentField) return "◇";
-      return groupIcons[this.currentField.group] || "◇";
-    },
   },
   methods: {
     onFieldChange(fieldId) {
@@ -141,80 +135,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-.qr {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 36px;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 10px;
-  background: #fff;
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  transition: border-color 0.12s;
-}
-.qr:hover {
-  border-color: #d1d5db;
-}
-
-.qr__field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.qr__field-icon {
-  font-size: 0.8rem;
-  color: #9ca3af;
-  flex-shrink: 0;
-  width: 18px;
-  text-align: center;
-}
-.qr__operator,
-.qr__value {
-  min-width: 0;
-}
-
-.qr__select {
-  width: 100%;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 0.875rem;
-  color: #374151;
-  cursor: pointer;
-  padding: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ca3af'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0 center;
-  padding-right: 14px;
-}
-.qr__select:disabled {
-  color: #d1d5db;
-  cursor: not-allowed;
-}
-
-.qr__no-value {
-  font-size: 0.78rem;
-  color: #d1d5db;
-  font-style: italic;
-}
-
-.qr__delete {
-  background: none;
-  border: none;
-  color: #d1d5db;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  transition: color 0.12s;
-  justify-self: center;
-}
-.qr__delete:hover {
-  color: #ef4444;
-}
-</style>

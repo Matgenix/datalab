@@ -3,6 +3,9 @@
     <div v-if="isSampleFetchError" class="alert alert-danger">
       Server Error. Sample list not retrieved.
     </div>
+    <div v-if="myItemKeysError" class="alert alert-danger">
+      Could not load your items for the "My items" filter: {{ myItemKeysError }}
+    </div>
 
     <DynamicDataTableButtons
       :data-type="dataType"
@@ -195,7 +198,11 @@ import { INVENTORY_TABLE_TYPES, EDITABLE_INVENTORY } from "@/resources.js";
 import { FilterMatchMode, FilterOperator, FilterService } from "@primevue/core/api";
 import DataTable from "primevue/datatable";
 import Column from "primevue/column";
-import { fetchAdvancedQueryConfig } from "@/server_fetch_utils.js";
+import { fetchAdvancedQueryConfig, runQueryAllPages } from "@/server_fetch_utils.js";
+import { rowKey } from "@/utils/tableColumns.js";
+
+// Most "my items" fetched for the "My items" quick filter, per searchable type.
+const MAX_MY_ITEMS = 20000;
 
 export default {
   components: {
@@ -291,6 +298,11 @@ export default {
       advancedQueryConfigRequestId: 0,
       activeQuickFilters: [],
       groupByFields: [],
+      // Row keys of the entries the current user created, for the "My items" quick filter:
+      // fetched from the server, since table rows only carry creators' names.
+      myItemKeys: null,
+      myItemKeysError: null,
+      myItemKeysRequestId: 0,
     };
   },
 
@@ -334,13 +346,22 @@ export default {
           ]),
       );
     },
+    // The table's own (current) rows for the advanced query results, in result order, so that
+    // rows edited or deleted after the search are shown as they are now.
+    advancedQueryResultRows() {
+      if (!this.data || this.advancedQueryResults === null) return this.data;
+      const order = new Map(this.advancedQueryResults.map((row, i) => [rowKey(row), i]));
+      return this.data
+        .filter((row) => order.has(rowKey(row)))
+        .sort((a, b) => order.get(rowKey(a)) - order.get(rowKey(b)));
+    },
     availableColumns() {
       return this.columns.map((col) => ({ ...col }));
     },
     // Rows after the server-side advanced query and client-side quick filters, before
     // DataTable's own column filters / global search are applied on top of them.
     displayedData() {
-      const base = this.advancedQueryResults !== null ? this.advancedQueryResults : this.data;
+      const base = this.advancedQueryResults !== null ? this.advancedQueryResultRows : this.data;
       if (!base) return base;
       if (!this.activeQuickFilters.length) return base;
       return base.filter((item) =>
@@ -349,9 +370,29 @@ export default {
     },
   },
   watch: {
+    // DataTable only reports its filtered rows (@filter) when it has filters, so also take
+    // them from it whenever the rows it is given change, e.g. after an advanced search.
+    displayedData() {
+      this.$nextTick(() => {
+        this.filteredData = this.$refs.datatable?.processedData ?? this.displayedData ?? [];
+      });
+    },
+    activeQuickFilters(filters) {
+      if (!filters.includes("my_items")) {
+        this.myItemKeysError = null;
+      } else if (this.myItemKeys === null) {
+        this.loadMyItemKeys();
+      }
+    },
+    // The table's rows change when items are created or deleted, so refresh which are mine.
+    data() {
+      this.resetMyItemKeys();
+      if (this.activeQuickFilters.includes("my_items")) this.loadMyItemKeys();
+    },
     dataType() {
       this.advancedQueryConfig = null;
       this.advancedQueryResults = null;
+      this.resetMyItemKeys();
       this.activeQuickFilters = [];
       this.groupByFields = [];
       this.loadAdvancedQueryConfig();
@@ -441,6 +482,29 @@ export default {
     handleAdvancedQueryResults(items) {
       this.advancedQueryResults = items;
     },
+    // Forget the keys, and any request for them still running, so it cannot fill in stale ones.
+    resetMyItemKeys() {
+      this.myItemKeysRequestId++;
+      this.myItemKeys = null;
+      this.myItemKeysError = null;
+    },
+    async loadMyItemKeys() {
+      const requestId = ++this.myItemKeysRequestId;
+      this.myItemKeysError = null;
+      const types = this.advancedQueryConfig?.types || [];
+      try {
+        const results = await Promise.all(
+          types.map((t) => runQueryAllPages(t.id, { mine: true }, MAX_MY_ITEMS)),
+        );
+        if (requestId !== this.myItemKeysRequestId) return;
+        this.myItemKeys = new Set(results.flatMap((r) => r.items.map(rowKey)));
+      } catch (error) {
+        if (requestId !== this.myItemKeysRequestId) return;
+        // Keys stay unloaded, so turning the filter on again retries; until then nothing
+        // matches and the reason is shown above the table, if the filter is still on.
+        if (this.activeQuickFilters.includes("my_items")) this.myItemKeysError = error.message;
+      }
+    },
     onUpdateQuickFilters(next) {
       this.activeQuickFilters = next;
     },
@@ -449,8 +513,8 @@ export default {
     },
     matchesQuickFilter(item, filterId) {
       if (filterId === "my_items") {
-        const displayName = this.$store.getters.getCurrentUserDisplayName;
-        return (item.creators || []).some((c) => c.display_name === displayName);
+        // Matched by ID on the server (see loadMyItemKeys); nothing matches until loaded.
+        return this.myItemKeys !== null && this.myItemKeys.has(rowKey(item));
       }
       if (filterId === "latest_week" || filterId === "latest_month") {
         if (!item.date) return false;
