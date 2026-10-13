@@ -36,6 +36,28 @@ import {
 } from "@/utils/filterMatchers";
 
 /**
+ * Return the stable logical identity shared by table rendering, grouping and selection.
+ */
+export function defaultTableRowKey(row) {
+  const id =
+    row?.item_id ??
+    row?.collection_id ??
+    row?.immutable_id ??
+    row?.group_id ??
+    row?._id?.$oid ??
+    row?._id;
+
+  if (id === undefined || id === null || (typeof id === "object" && id !== null)) {
+    if (process.env.NODE_ENV !== "production") {
+      throw new Error("DynamicDataTable rows must have a stable identifier");
+    }
+    return null;
+  }
+
+  return id;
+}
+
+/**
  * Column definitions shared by the item tables (samples, starting materials, equipment and
  * a collection's children).
  *

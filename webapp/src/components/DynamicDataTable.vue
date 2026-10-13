@@ -5,14 +5,17 @@
     </div>
 
     <DataTable
+      :key="isGrouped ? 'grouped' : 'flat'"
       ref="datatable"
       v-model:filters="filters"
       v-model:selection="itemsSelected"
       v-model:select-all="allSelected"
-      :value="data"
+      :value="tableData"
       :data-testid="computedDataTestId"
-      selection-mode="checkbox"
-      paginator
+      :data-key="isGrouped ? '__displayKey' : null"
+      :selection-mode="isGrouped ? null : 'checkbox'"
+      :paginator="!isGrouped"
+      :lazy="isGrouped"
       :first="page * rows"
       :rows="rows"
       :rows-per-page-options="[10, 20, 50, 100]"
@@ -20,10 +23,13 @@
       :global-filter-fields="globalFilterFields"
       removable-sort
       column-resize-mode="fit"
-      resizable-columns
+      :resizable-columns="!isGrouped"
       sort-mode="multiple"
       state-storage="local"
-      :state-key="`datatable-state-${dataType}`"
+      :state-key="isGrouped ? null : `datatable-state-${dataType}`"
+      :row-group-mode="isGrouped ? 'subheader' : null"
+      :group-rows-by="isGrouped ? '__groupKey' : null"
+      :row-style="isGrouped ? groupedRowStyle : null"
       :loading="data === null"
       @state-restore="onStateRestore"
       @state-save="onStateSave"
@@ -79,12 +85,49 @@
       </template>
       <template #empty> No entries found. </template>
 
+      <template #groupheader="{ data: groupRow }">
+        <DataTableGroupHeader
+          v-if="isGroupRow(groupRow)"
+          :label="groupRow.group.value.label"
+          :count="groupRow.group.count"
+          :depth="groupRow.group.depth"
+          :expanded="expandedGroupKeys.has(groupRow.group.pathKey)"
+          :page="groupRow.groupPage.page"
+          :page-count="groupRow.groupPage.pageCount"
+          @toggle="toggleGroup(groupRow.group.pathKey)"
+          @page="setGroupPage(groupRow.group.pathKey, $event)"
+        />
+      </template>
+
       <Column
         v-if="showButtons"
         class="checkbox"
-        selection-mode="multiple"
+        :selection-mode="isGrouped ? null : 'multiple'"
         :style="{ minWidth: '3.5ch' }"
-      ></Column>
+      >
+        <template v-if="isGrouped" #header>
+          <span class="checkbox" @click.stop>
+            <Checkbox
+              binary
+              :model-value="groupedAllSelected"
+              :indeterminate="groupedSelectionIndeterminate"
+              :disabled="visibleGroupedItems.length === 0"
+              aria-label="Select visible rows"
+              @update:model-value="onGroupedSelectAllChange"
+            />
+          </span>
+        </template>
+        <template v-if="isGrouped" #body="slotProps">
+          <span v-if="isItemRow(slotProps.data)" class="checkbox" @click.stop>
+            <Checkbox
+              binary
+              :model-value="isGroupedItemSelected(slotProps.data)"
+              aria-label="Select row"
+              @update:model-value="toggleGroupedItem(slotProps.data, $event)"
+            />
+          </span>
+        </template>
+      </Column>
 
       <Column
         v-for="column in selectedColumns"
@@ -108,15 +151,20 @@
         <template v-if="column.body" #body="slotProps">
           <component
             :is="column.body.component"
-            v-bind="column.body.props(slotProps.data)"
+            v-if="isItemRow(slotProps.data)"
+            v-bind="column.body.props(sourceRow(slotProps.data))"
             v-on="resolveBodyEvents(column)"
           />
         </template>
         <template v-else-if="column.getValue" #body="slotProps">
-          <span :class="column.cellClass">{{ column.getValue(slotProps.data) }}</span>
+          <span v-if="isItemRow(slotProps.data)" :class="column.cellClass">
+            {{ column.getValue(sourceRow(slotProps.data)) }}
+          </span>
         </template>
         <template v-else #body="slotProps">
-          <span :class="column.cellClass">{{ slotProps.data[column.field] }}</span>
+          <span v-if="isItemRow(slotProps.data)" :class="column.cellClass">
+            {{ sourceRow(slotProps.data)[column.field] }}
+          </span>
         </template>
 
         <template v-if="column.filter" #filter="{ filterModel, filterCallback }">
@@ -135,7 +183,19 @@
           />
         </template>
       </Column>
+
+      <!-- PrimeVue subtracts the grouped column from its group-header colspan. -->
+      <Column v-if="isGrouped" field="__groupKey" :sortable="false"></Column>
     </DataTable>
+
+    <Paginator
+      v-if="isGrouped && groupedTable.rootPageCount > 1"
+      :first="groupedTable.rootPage * rows"
+      :rows="rows"
+      :total-records="groupedTable.rootTotal"
+      :rows-per-page-options="[10, 20, 50, 100]"
+      @page="onRootGroupPage"
+    />
   </div>
   <CreateItemModal
     v-model="createItemModalIsOpen"
@@ -159,6 +219,7 @@
 
 <script>
 import DynamicDataTableButtons from "@/components/DynamicDataTableButtons";
+import DataTableGroupHeader from "@/components/DataTableGroupHeader";
 import CreateItemModal from "@/components/CreateItemModal";
 import BatchCreateItemModal from "@/components/BatchCreateItemModal";
 import QRScannerModal from "@/components/QRScannerModal";
@@ -168,14 +229,25 @@ import AddToCollectionModal from "@/components/AddToCollectionModal";
 import BatchShareModal from "@/components/BatchShareModal";
 
 import { INVENTORY_TABLE_TYPES, EDITABLE_INVENTORY } from "@/resources.js";
+import { defaultTableRowKey } from "@/utils/tableColumns";
+import {
+  buildGroupTree,
+  collectGroupKeys,
+  filterTableRows,
+  flattenGroupTree,
+  sortTableRows,
+} from "@/utils/tableGrouping";
 
 import { FilterMatchMode, FilterOperator, FilterService } from "@primevue/core/api";
+import Checkbox from "primevue/checkbox";
 import DataTable from "primevue/datatable";
 import Column from "primevue/column";
+import Paginator from "primevue/paginator";
 
 export default {
   components: {
     DynamicDataTableButtons,
+    DataTableGroupHeader,
     CreateItemModal,
     BatchCreateItemModal,
     QRScannerModal,
@@ -185,6 +257,8 @@ export default {
     BatchShareModal,
     DataTable,
     Column,
+    Checkbox,
+    Paginator,
   },
   props: {
     columns: {
@@ -229,6 +303,16 @@ export default {
       required: false,
       default: null,
     },
+    groupBy: {
+      type: Array,
+      required: false,
+      default: () => [],
+    },
+    rowKey: {
+      type: Function,
+      required: false,
+      default: defaultTableRowKey,
+    },
   },
   emits: [
     "remove-selected-items-from-collection",
@@ -258,11 +342,65 @@ export default {
       // Names of the per-column matchers this instance registered with the global
       // FilterService, so that they can be removed again when it unmounts.
       registeredMatchModes: [],
+      expandedGroupKeys: new Set(),
+      groupPages: new Map(),
+      rootGroupPage: 0,
+      userSortMeta: [],
     };
   },
 
   computed: {
+    isGrouped() {
+      return this.groupBy.length > 0;
+    },
+    groupedFilteredRows() {
+      if (!this.isGrouped) return [];
+      return filterTableRows(this.data, this.filters, this.globalFilterFields);
+    },
+    groupedSortedRows() {
+      return sortTableRows(this.groupedFilteredRows, this.userSortMeta);
+    },
+    groupTree() {
+      return buildGroupTree(this.groupedSortedRows, this.groupBy, this.rowKey);
+    },
+    groupedTable() {
+      if (!this.isGrouped) {
+        return {
+          rows: [],
+          visibleItems: [],
+          rootPage: 0,
+          rootTotal: 0,
+          rootPageCount: 0,
+          groupPages: new Map(),
+        };
+      }
+      return flattenGroupTree(this.groupTree, {
+        expandedGroupKeys: this.expandedGroupKeys,
+        groupPages: this.groupPages,
+        rootPage: this.rootGroupPage,
+        rowsPerPage: this.rows,
+      });
+    },
+    tableData() {
+      return this.isGrouped ? this.groupedTable.rows : this.data;
+    },
+    visibleGroupedItems() {
+      return this.groupedTable.visibleItems;
+    },
+    groupedAllSelected() {
+      return (
+        this.visibleGroupedItems.length > 0 &&
+        this.visibleGroupedItems.every((item) => this.isSourceSelected(item))
+      );
+    },
+    groupedSelectionIndeterminate() {
+      if (this.groupedAllSelected) return false;
+      return this.visibleGroupedItems.some((item) => this.isSourceSelected(item));
+    },
     filteredItemCount() {
+      if (this.isGrouped) {
+        return new Set(this.groupedFilteredRows.map((item) => this.rowKey(item))).size;
+      }
       if (this.filteredData === null) {
         return this.data ? this.data.length : 0;
       }
@@ -303,6 +441,29 @@ export default {
     },
     availableColumns() {
       return this.columns.map((col) => ({ ...col }));
+    },
+  },
+  watch: {
+    groupBy: {
+      deep: true,
+      handler() {
+        this.expandedGroupKeys = new Set();
+        this.groupPages = new Map();
+        this.rootGroupPage = 0;
+        this.$nextTick(() => {
+          this.allSelected = this.checkAllSelected();
+        });
+      },
+    },
+    filters: {
+      deep: true,
+      handler() {
+        if (this.isGrouped) this.resetGroupPages();
+      },
+    },
+    data() {
+      if (!this.isGrouped) return;
+      this.$nextTick(this.reconcileGroupState);
     },
   },
   created() {
@@ -370,6 +531,103 @@ export default {
     this.registeredMatchModes = [];
   },
   methods: {
+    isGroupRow(row) {
+      return this.isGrouped && row?.__rowKind === "group";
+    },
+    isItemRow(row) {
+      return !this.isGrouped || row?.__rowKind === "item";
+    },
+    sourceRow(row) {
+      return this.isGrouped ? row?.source : row;
+    },
+    groupedRowStyle(row) {
+      return this.isGroupRow(row) ? { display: "none" } : null;
+    },
+    isSourceSelected(source) {
+      const key = this.rowKey(source);
+      return this.itemsSelected.some((item) => this.rowKey(item) === key);
+    },
+    isGroupedItemSelected(row) {
+      return this.isItemRow(row) && this.isSourceSelected(row.source);
+    },
+    toggleGroupedItem(row, checked) {
+      if (!this.isItemRow(row)) return;
+      const key = this.rowKey(row.source);
+      if (checked && !this.isSourceSelected(row.source)) {
+        this.itemsSelected = [...this.itemsSelected, row.source];
+      } else if (!checked) {
+        this.itemsSelected = this.itemsSelected.filter((item) => this.rowKey(item) !== key);
+      }
+      this.allSelected = this.checkAllSelected();
+    },
+    onGroupedSelectAllChange(checked) {
+      const visibleKeys = new Set(this.visibleGroupedItems.map((item) => this.rowKey(item)));
+      if (checked) {
+        const selectedKeys = new Set(this.itemsSelected.map((item) => this.rowKey(item)));
+        this.itemsSelected = [
+          ...this.itemsSelected,
+          ...this.visibleGroupedItems.filter((item) => !selectedKeys.has(this.rowKey(item))),
+        ];
+      } else {
+        this.itemsSelected = this.itemsSelected.filter(
+          (item) => !visibleKeys.has(this.rowKey(item)),
+        );
+      }
+      this.allSelected = this.checkAllSelected();
+    },
+    toggleGroup(pathKey) {
+      const next = new Set(this.expandedGroupKeys);
+      if (next.has(pathKey)) next.delete(pathKey);
+      else next.add(pathKey);
+      this.expandedGroupKeys = next;
+      this.$nextTick(() => {
+        this.allSelected = this.checkAllSelected();
+      });
+    },
+    setGroupPage(pathKey, page) {
+      const next = new Map(this.groupPages);
+      next.set(pathKey, page);
+      this.groupPages = next;
+      this.$nextTick(() => {
+        this.allSelected = this.checkAllSelected();
+      });
+    },
+    resetGroupPages() {
+      this.groupPages = new Map();
+      this.rootGroupPage = 0;
+    },
+    reconcileGroupState() {
+      const validKeys = collectGroupKeys(this.groupTree);
+      this.expandedGroupKeys = new Set(
+        [...this.expandedGroupKeys].filter((pathKey) => validKeys.has(pathKey)),
+      );
+      const pages = new Map();
+      const collectPages = (groups) => {
+        for (const group of groups) {
+          const entries = group.children.length ? group.children : group.items;
+          const lastPage = Math.max(Math.ceil(entries.length / this.rows) - 1, 0);
+          pages.set(group.pathKey, Math.min(this.groupPages.get(group.pathKey) || 0, lastPage));
+          collectPages(group.children);
+        }
+      };
+      collectPages(this.groupTree);
+      this.groupPages = pages;
+      const lastRootPage = Math.max(Math.ceil(this.groupTree.length / this.rows) - 1, 0);
+      this.rootGroupPage = Math.min(this.rootGroupPage, lastRootPage);
+      this.$nextTick(() => {
+        this.allSelected = this.checkAllSelected();
+      });
+    },
+    onRootGroupPage(event) {
+      this.rootGroupPage = event.page;
+      if (event.rows !== this.rows) {
+        this.updateRows(event.rows);
+        this.groupPages = new Map();
+      }
+      this.$nextTick(() => {
+        this.allSelected = this.checkAllSelected();
+      });
+    },
     resolveBodyEvents(column) {
       const listeners = Object.fromEntries(
         (column.body?.events || []).map((event) => [
@@ -422,6 +680,8 @@ export default {
     },
     onSort(event) {
       const sortedColumns = event.multiSortMeta || [];
+      this.userSortMeta = [...sortedColumns];
+      if (this.isGrouped) this.groupPages = new Map();
 
       this.$nextTick(() => {
         const tableHeaders = document.querySelectorAll(".p-datatable-sortable-column");
@@ -443,7 +703,8 @@ export default {
       if (this.dataType === "users" || this.dataType === "groups" || this.dataType === "tags") {
         return;
       }
-      const row = event.data;
+      if (this.isGrouped && !this.isItemRow(event.data)) return;
+      const row = this.sourceRow(event.data);
       let row_id = null;
 
       event.originalEvent.stopPropagation();
@@ -492,6 +753,7 @@ export default {
       return false;
     },
     getVisibleItems() {
+      if (this.isGrouped) return this.visibleGroupedItems;
       if (this.$refs.datatable) {
         try {
           return this.$refs.datatable.dataToRender();
@@ -507,6 +769,10 @@ export default {
         return false;
       }
 
+      if (this.isGrouped) {
+        return visibleItems.every((item) => this.isSourceSelected(item));
+      }
+
       return visibleItems.every((currentItem) => {
         const currentId = currentItem.item_id || currentItem.collection_id;
         return this.itemsSelected.some(
@@ -515,7 +781,7 @@ export default {
       });
     },
     onFilter(event) {
-      this.filteredData = event.filteredValue;
+      this.filteredData = this.isGrouped ? this.groupedFilteredRows : event.filteredValue;
       this.$nextTick(() => {
         this.allSelected = this.checkAllSelected();
       });
