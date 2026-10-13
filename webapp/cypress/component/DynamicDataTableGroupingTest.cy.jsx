@@ -16,7 +16,7 @@ describe("DynamicDataTable grouping", () => {
       state: {
         currentUserID: null,
         datatablePaginationSettings: {
-          groupingExample: { page: 0, rows: 20 },
+          groupingExample: { page: 0, rows: 5 },
         },
       },
       getters: {
@@ -47,6 +47,54 @@ describe("DynamicDataTable grouping", () => {
     cy.contains("td", /^item-1$/).should("have.length", 1);
     cy.contains("td", /^item-4$/).should("have.length", 1);
     cy.get(".p-paginator").should("exist");
+  });
+
+  it("paginates flat rows in pages of five", () => {
+    cy.get('[data-testid="show-pagination"]').click();
+    cy.get(".p-datatable-tbody > tr").should("have.length", 5);
+    cy.contains("td", /^item-5$/).should("have.length", 1);
+    cy.contains("td", /^item-6$/).should("not.exist");
+
+    cy.get(".p-paginator-next").click();
+    cy.contains("td", /^item-6$/).should("have.length", 1);
+    cy.contains("td", /^item-1$/).should("not.exist");
+  });
+
+  it("paginates root groups and limits each expanded group to five items", () => {
+    cy.get('[data-testid="show-pagination"]').click();
+    cy.get('[data-testid="group-by-tags"]').click();
+
+    cy.get('[data-testid="group-header"]').should("have.length", 5);
+    groupHeader("Red").should("exist");
+    cy.get(".p-paginator-next").click();
+    cy.get('[data-testid="group-header"]').should("have.length", 1);
+    groupHeader("Red").should("not.exist");
+    cy.get(".p-paginator-prev").click();
+
+    groupHeader("Red").find('[data-testid="group-toggle"]').click();
+    groupHeader("Red").find('[data-testid="group-pager"]').should("contain.text", "1 / 2");
+    itemCells("item-7").should("exist");
+    itemCells("item-8").should("not.exist");
+
+    groupHeader("Red").find('[aria-label="Next group page"]').click();
+    groupHeader("Red").find('[data-testid="group-pager"]').should("contain.text", "2 / 2");
+    itemCells("item-8").should("exist");
+    itemCells("item-1").should("not.exist");
+  });
+
+  it("paginates nested groups independently", () => {
+    cy.get('[data-testid="show-pagination"]').click();
+    cy.get('[data-testid="group-by-tags-status"]').click();
+    groupHeader("Red").find('[data-testid="group-toggle"]').click();
+    groupHeader("Active").find('[data-testid="group-toggle"]').click();
+
+    groupHeader("Active").find('[data-testid="group-pager"]').should("contain.text", "1 / 2");
+    itemCells("item-7").should("exist");
+    itemCells("item-8").should("not.exist");
+
+    groupHeader("Active").find('[aria-label="Next group page"]').click();
+    itemCells("item-8").should("exist");
+    itemCells("item-1").should("not.exist");
   });
 
   it("expands nested tag and status groups in the same DataTable", () => {
